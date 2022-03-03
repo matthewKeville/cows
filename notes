@@ -1,0 +1,15 @@
+for event
+it's event.offsetX i.e. lowercase offset and capital dimension
+
+there is a discrepancy between the cows underlying cp, and the visual
+location that maps to it from the onClick method
+
+If I click the spot of the circle located in the northwest hex, the cow is
+clicked. I have fudged some data keeping and point representation. I
+will need to restructure this data and the rendering methods to avoid
+redudancy and the introduction of more error prone code. I should refactor
+all drawing operations to canned Path2D paths, and recalculate only when necessary.
+I.e. dynamic elements such as cows. Tiles will never need to have paths recalculated.
+
+event offsetX differs than x
+x is the true coordinate of the entire html document ...

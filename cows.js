@@ -104,7 +104,7 @@ class cow {
      */
  
      this.path = new Path2D();
-     this.path.arc(this.node.cp.x,this.node.cp.y,20,0,2*Math.PI);
+     this.path.arc(this.node.cp.x,this.node.cp.y,this.size,0,2*Math.PI);
   }
 
   //draw a circle
@@ -123,6 +123,8 @@ class cow {
     if (moveRoll > 40) {
       move = true;
     }
+    //debug setting right now
+    //move = false;
 
       if (move) {
       let moves = []
@@ -141,7 +143,7 @@ class cow {
         this.node.occupant = this;
         //update the rendering path for the cow
         this.path = new Path2D();
-        this.path.arc(this.node.cp.x,this.node.cp.y,10,0,2*Math.PI);
+        this.path.arc(this.node.cp.x,this.node.cp.y,this.size,0,2*Math.PI);
       } else {
         //console.log("tried to move, but couldn't");
       }
@@ -861,6 +863,45 @@ class grid {
     }
   }
 
+  //@precondition : tileFill has been called
+  //remove tiles from the grid at random, bias removal towards the center of the grid
+  //i.e. lower indices
+  //sparsity -> percentage of tiles to remove
+  randomRemoval(sparsity) {
+    if ( sparsity < 0 || sparsity > 1) {
+      console.warn("invalid sparsity for grid random removal");
+    }
+    //this.closed
+    let quota = Math.floor(this.closed.length*sparsity);
+    while (quota != 0) {
+      let kill = Math.floor(Math.random()*this.closed.length);
+      let dead = (this.closed.splice(kill,1));
+      dead = dead[0];
+      ctx.fillRect(dead.cp.x,dead.cp.y,10,10);
+      console.log(dead);
+      //remove this tile's neighbors references to this tile.
+      dead.neighbors.forEach( n => {
+        let deadReferenceIndex = n.neighbors.indexOf(dead);
+        if (deadReferenceIndex == -1) {
+          console.log("houston we have a problem");
+        }
+        n.neighbors.splice(deadReferenceIndex);
+      }); 
+      
+      quota--;
+    }
+  }
+
+
+  //pick out random patches of tile, such that
+  //of varying size until the sparsity quota has been meet
+  //should be able to specify level of recursion or recursion range
+  //and sparsity, how to satisfy both?
+  patchRemoval(sparsity) {
+  }
+
+
+
 
   update() {
     this.closed.forEach( tile => {
@@ -884,7 +925,7 @@ rectRad = rectRadialFactory(100,100);
 
 //parametric closed curve initialization
 c1 = new curve(new point(width/5,height/2),ccrad,ctx);
-c1.setScale(1);
+c1.setScale(1.2);
 
 //rectangle curve
 //r1 = new curve(new point(width/5,height/2),rectRad,ctx);
@@ -900,8 +941,11 @@ squareCon = dummySquare.constructor;
 
 //Make a a grid of hexes (with hex constructor)
 //that is bound by the closed curve c1.
-//hg = new grid(c1,hexCon,25,ctx);
-hg = new grid(c1,squareCon,25,ctx);
+let sparsity = Math.random()*5 / 10;
+hg = new grid(c1,hexCon,60,ctx);
+//random removal
+hg.randomRemoval(sparsity);
+//hg = new grid(c1,squareCon,25,ctx);
 
 //for each tile in the grid assign it a grassTile type
 hg.closed.forEach( hex => { hex.tile = new grassTile();});
@@ -915,7 +959,7 @@ console.log(hg.closed);
 /////////////////////////////
 
 cows = [];
-numCows  = 10;
+numCows  = 1;
 for (let i = 0; i < numCows; i++) {
   //pick random unoccupied spots
   let index = 0;
@@ -929,14 +973,23 @@ for (let i = 0; i < numCows; i++) {
     debug++;
 
     if (numCows > hg.closed.length) {
-      quit();
+      console.warn("not enough tiles for requested cows");
     }
   }
   console.log("yay cow");
+  /*
   let r = Math.random()*255;
   let g = Math.random()*255;
   let b = Math.random()*255;
-  let happyCow = new cow(hg.closed[index],30,'rgb('+r+','+g+','+b+')',ctx); 
+  */
+
+  //intense colors
+  let r = Math.random()*125;
+  let g = Math.random()*125;
+  let b = Math.random()*125;
+
+
+  let happyCow = new cow(hg.closed[index],25,'rgb('+r+','+g+','+b+')',ctx); 
   happyCow.node.occupant = happyCow;
   cows.push(happyCow);
 }
@@ -953,9 +1006,9 @@ let updateTiles = function () {console.log("clear all"); ctx.clearRect(0,0,width
   cw.update();
   cw.draw();
 
-  ctx.fillRect(100,100,10,10);
+  //ctx.fillRect(100,100,10,10);
 
-  ctx.fillRect(800,800,10,10);
+  //ctx.fillRect(800,800,10,10);
 
 });};
 
@@ -964,37 +1017,20 @@ let updateTiles = function () {console.log("clear all"); ctx.clearRect(0,0,width
 //setInterval(updateTiles,2000);
 setInterval(updateTiles,500);
 
-//canvas onclick ...
 //Check if the click hits the bounding area of a cow, to pull up information
 //about that cow.
 canvas.addEventListener('click', function(event) {
-  console.log("event event event");
-  console.log(event);
-
-
-  //struggling to find an accurate mapping of the client view of the
-  //canvas and the underlying coordinates ...
-
   //console.log(event.offsetX," ",event.offsetY);
-  let rect = canvas.getBoundingClientRect();
-  console.log("bounding method");
-  console.log(event.clientX - rect.left," ",event.clientY - rect.top);
-
-  console.log("offset");
-  console.log(event.offsetX," ",event.offsetY);
-
-  console.log("absolute");
-  console.log(event.x," ",event.y);
-
+  //draw a rect where the click is 
+  ctx.fillRect(event.offsetX,event.offsetY,10,10);
 
   //check where the click is
-  
   cows.forEach( cw => {
-    console.log("eval cow",cw);
-    ctx.stroke(cw.path);
+    //determine if the click is inside the path of the cows bounding curve
     if (ctx.isPointInPath(cw.path, event.offsetX,event.offsetY)) 
       {
-        console.log("a cow was clicked");
+        console.log("a cow was clicked", cw);
+        ctx.stroke(cw.path);
       }
   });
 });

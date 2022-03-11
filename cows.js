@@ -1,162 +1,20 @@
 //Set Canvas and Viewport dimensions
-const canvas = document.querySelector('#mainCanvas');
-const width = canvas.width = window.innerWidth;
-const height = canvas.height = window.innerHeight;
-const ctx = canvas.getContext('2d'); // ctx is a CanvasRenderingContext2D
+const cowCanvas = document.querySelector('#cowCanvas');
+const mapCanvas = document.querySelector('#mapCanvas');
+const width = cowCanvas.width = mapCanvas.width = window.innerWidth;
+const height = cowCanvas.height = mapCanvas.height = window.innerHeight;
 
-//dummy tile
-class emptyTile {
-  constructor() {}
-  update() {}
-  style() { return 'rgb(0,0,255)';};
-}
+const cowCtx = cowCanvas.getContext('2d'); 
+const mapCtx = mapCanvas.getContext('2d'); 
 
-/**
- * Shape is either a hex , *triangle, or square.
-  They grow as the update function is called by it's growth rate
-  The alpha value of the color of the grass tile indicates growth.
-*/
-class grassTile {
-  static baseGrowthRate = .002;
-  static maxGrowth = 10;
-  constructor(growth,rate) {
-    //defaults , no args
-    if (growth == null) {
-      //console.log("no args");
-      growth = .5 * Math.random() * grassTile.maxGrowth;
-      //growth = 0;
-      rate = Math.random()*3*grassTile.baseGrowthRate;
-      //console.log(growth,rate);
-    }
+//load cow sprite sheet
+let img = document.getElementById("cowsprites");
 
-    // growth can't be 0 or ge than max
-    if (growth > grassTile.maxGrowth || growth < 0) {
-     throw new Error();
-    }
-    this.growth = growth; // [0,1]
-    this.rate   = rate;
-  }
-
-  update() {
-    if (this.growth < grassTile.maxGrowth) {
-      this.growth += this.rate*grassTile.maxGrowth;
-      if (this.growth > grassTile.maxGrowth) {
-        this.growth = grassTile.maxGrowth;
-      }
-    }
-  }
-  
-  //inform shape how to color this tile
-  style() {
-    return 'rgba(0,255,0,' + (this.growth/grassTile.maxGrowth) +')';
-  }
-
-}
-
-/*
-class waterTile {
-  static maxDepth = 10;
-  static baseAlpha = .3;
-  constructor(x,y,width,height,depth,ctx) {
-    this.x = x;
-    this.y = y;
-    this.width = width;
-    this.height = height;
-    this.depth = depth;
-    this.ctx
-  }
-
-  draw() {
-    ctx.save();
-    ctx.clearRect(this.x,this.y,this.width,this.height)
-    ctx.fillStyle = 'rgba(0,0,0)';
-    ctx.strokeRect(this.x,this.y,this.width,this.height);
-    ctx.fillStyle = 'rgba(0,0,255,' + ((this.depth/waterTile.maxDepth)*(1-waterTile.baseAlpha)+waterTile.baseAlpha) +')';
-    ctx.fillRect(this.x,this.y,this.width,this.height);
-    ctx.restore();
-  }
-
-  update() {
-  }
-}
-*/
-
-//tile here means shape ...
-//maybe change 'tile' to type and 'shape' to tile
-class cow {
-  constructor(node,size,color,ctx) {
-    this.node = node;
-    this.size = size;
-    this.color = color;
-    this.ctx = ctx;
-
-    this.name = "bob";
-    this.health = 100;
-    this.hunger = 0;
-
-    /* test for now , PATH2D should be expanded on the future,
-     * to be used for the draw method. I will code duplicate for time
-     * being as proof of concept. Ideally, on construction 
-     * this.path will be assigned and when drawing happens, it will reference
-     * it. If translation happens it will update underlying path2D. This will
-     * reduce computational overhead of calculating the vertices of the
-     * path on every frame
-     */
- 
-     this.path = new Path2D();
-     this.path.arc(this.node.cp.x,this.node.cp.y,this.size,0,2*Math.PI);
-  }
-
-  //draw a circle
-  draw() {
-    this.ctx.save();
-    this.ctx.fillStyle=this.color;
-    this.ctx.fill(this.path);
-    this.ctx.restore();
-  }
-
-
-  update() {
-    //will I move?
-    let move = false;
-    let moveRoll = Math.random()*100;
-    if (moveRoll > 40) {
-      move = true;
-    }
-    //debug setting right now
-    //move = false;
-
-      if (move) {
-      let moves = []
-      this.node.neighbors.forEach( nt => {
-        if ( nt.occupant == null ) {
-          moves.push(nt);
-        }
-      });
-      if (moves.length != 0) {
-        let dir = Math.floor( Math.random() * moves.length);
-        //let tile know I left
-        this.node.occupant = null;
-        //remind myself where I am
-        this.node = moves[dir];
-        //let tile now I'm here
-        this.node.occupant = this;
-        //update the rendering path for the cow
-        this.path = new Path2D();
-        this.path.arc(this.node.cp.x,this.node.cp.y,this.size,0,2*Math.PI);
-      } else {
-        //console.log("tried to move, but couldn't");
-      }
-    }
-  }
-
-}
+const tick = 1000; //simulation time step in ms
 
 ////////////////////
 //Utility
 ///////////////////
-
-
 
 class point {
   static epsilon = .001;
@@ -217,825 +75,1032 @@ function r2p(p1) {
   return new point(r,t);
 }
 
-
-//draw a circle with the gfx ctx
-function drawCirc(x,y,r) {
-  ctx.fillStyle='rgb(0,0,0)';
-  ctx.beginPath();
-  ctx.arc(x,y,r,0,2*Math.PI);
-  ctx.fill();
-  ctx.closePath();
+//take in two points (as vectors)
+//return angle between them
+function vecAngle(p1v,p2v) {
+  let dot = (p1v.x * p2v.x) + (p1v.y * p2v.y);
+  let p1n = Math.sqrt ( p1v.x * p1v.x + p1v.y * p1v.y)
+  let p2n = Math.sqrt ( p2v.x * p2v.x + p2v.y * p2v.y)
+  let ang = Math.acos( dot / (p1n*p2n) );
+  return ang;
 }
+
 
 /////////////////////////
 // Map Generation
 // //////////////////////
 
-/*
- * A curve contains a radial function. That is
- * given an angle theta, it will be able to produce
- * a radius r, thus given all points on the curve.
- *
- * The radial variable will be a function whose input is theta
- * and returns a radius from the center of the curve
- */
-class curve {
-  constructor(center,radial,ctx) {
-    //center of curve
-    this.center = center;
-    //radial function
-    this.radialBase = radial;
-    //graphics context
-    this.ctx = ctx;
-    //presentation scale
-    //display will misalign with the underlying radial
-    //function
-    this.scale = 1;
+
+class Tile {
+  constructor(cp,n,area,rotOff = 0,type) {
+    this.cp = cp;
+    this.n = n;
+    this.area = area;
+    this.sideL = Math.abs(2*Math.sqrt( this.area * Math.tan(Math.PI/this.n) / this.n));
+    this.radius = this.sideL / (2*(Math.sin( Math.PI / this.n ) ) );
+    this.apothem = this.radius * Math.cos(Math.PI/this.n);
+    this.rotOff = rotOff;
+    this.type = type;
+    this.neighbors = [];
+    this.occupant = null;
+    //set Tile's canvas it is it's own layer
+    this.ctx = mapCtx;
+    this.needsRedraw = true;
+    //set initial path for drawing
+    //needs to be rerender if tile moves
+    this.renderPath();
   }
 
-  clone(){
-    return new curve(this.center,this.radialBase,this.scale);
-  }
-  //draw this curve with the desired number of
-  //revolutions and precision
-  draw(revs,iters) {
-    this.ctx.save();
-    this.ctx.strokeStyle = 'rgb(255,0,0)' ;
-
-    //move ctx to middle of curve
-    this.ctx.translate(this.x,this.y); 
+  //draw the outline of the tile
+  draw() {
+   //console.log("drawing path");
+   this.ctx.stroke(this.path);
+   if ( this.type != null ) {
+     this.ctx.save();
+     this.ctx.fillStyle = this.type.color;
+     this.ctx.fill(this.path);
+     this.ctx.restore();
     
-    //draw a circle at the center of the curve 
-    //drawCirc(this.x,this.y,5);
+     if (this.type.harvestLevel > 60) {
+       //console.log("harvest level is visible");
+       this.ctx.save();
+       this.ctx.fillStyle = 'rgb(255,255,0)';
+       this.ctx.restore();
+     }
+   }
+  }
 
-    this.ctx.beginPath();
-
-    let dtheta = revs * (2*Math.PI) / iters; 
-    for ( var i = 0; i <= iters; i++) {
-      //current angle
-      let z = dtheta*i;
-      //current radius scaled by curve.scale
-      let r = this.radial(z);
-
-      let xy = p2r(r,z);
-      //translate to center
-      xy = xy.add(this.center);
-
-        //console.log(xi + " , " + yi);
-        if ( i!= 0 ) {
-          this.ctx.lineTo(xy.x,xy.y);
-          //if this is the first point, don't draw a line, just start the path
-        } else {
-          this.ctx.moveTo(xy.x,xy.y);
-        }
+  update() {
+    //console.log("tile update");
+    if ( this.type != null ) {
+      //console.log("calling update to type");
+      let currentColor = this.type.color;
+      this.type.update();
+      if (this.needsRedraw) {
+        this.draw();
       }
-    //draw path
-    this.ctx.stroke();
-    this.ctx.closePath();
-    //restore state of transform
-    this.ctx.restore();
-  }
-
-  moveTo(point) {
-    this.center = point;
-  }
-
-  copy() {
-    return new curve(this.center,this.radial,this.ctx);
-  }
-
-  setScale(s) {
-    this.scale = s;
-  }
-
-  //agnostic of center point
-  radial(z) {
-    return this.scale * this.radialBase(z);
-  }
-}
-
-
-///////////////////
-//radial functions
-///////////////////
-
-//assume that the center of these curves is the origin 
-//of the cartesian plane
-// This class represents a random closed curved with a sinusuidal basis
-// The class will allow the computation of points on this curve from [0,2PI]
-// And will have methods to draw the graph
-function closedCurveFactory(minPeriod,maxPeriod,minAmplitude,maxAmplitude,scale,length,iters) 
-  {
-  
-  /////////////////////////////////////////////////////////////// 
-  //calculate wave numbers,amplitudes,and an infinum lower bound
-  ///////////////////////////////////////////////////////////////
-
-  //f indicates the vars belonging to the generating call
-  var famps = [];
-  var fperiods = [];
-  for (let k = 0; k < length; k++) {
-    //amplitude
-    let amp = Math.random() * Math.abs(maxAmplitude - minAmplitude) + minAmplitude;
-    let period = Math.ceil(Math.random() * Math.abs(maxPeriod - minPeriod) + minPeriod);
-    famps.push(amp);
-    fperiods.push(period);
-  }
-  //////////////////////////////
-  //infinum lower bound
-  //////////////////////////////
-
-  //allows us to force this radial parameterization to be >= 0. 
-  //which guarantess that this curve has no self intersections
-  var finf = 0;
-  for ( let k = 0; k < length; k++) {
-    finf += Math.abs(famps[k]);
-  }
-
-
-  //calculate the radial function at a given value of theta
-  //addition to computed radial generates a more circular shape
-  //multiplication strictly amplifys scale
-  //must be somewhat to integrate smoothness and scale , without
-  //overscaling the shape
-  let radial = function(theta) {
-    //make a local copy of the values passed to the parent function 
-    //to be referenced in this self contained function
-    let amps = famps;
-    let periods = fperiods;
-    let inf = finf;
-    //calculate the radial from this sinusuidal composition
-    let radial = 0;
-    for ( let k = 0; k < length; k++ ) {
-      radial += amps[k]*Math.sin(periods[k]*theta);
-    } 
-    //add the lower infinum bound to this value to ensure non-self intersection
-    radial += Math.abs(inf);
-    //radial += 300; //as we add to the radial function it smooths out and becomes more circular
-    //I suppose we can compose any closed shap , such as an ellipse with the fourier series to create a a more elliptical shape
-    radial += 10;
-    radial *= scale;
-    //console.log(theta, " : " , radial);
-    return radial;
-  }
-  return radial;
-
- }
-
-
-
-//generate radial functions for rectangles of
-//given height and width
-function rectRadialFactory(width,height) {
-
-  //source : 
-  //https://math.stackexchange.com/questions/1703952/polar-coordinates-vector-equation-of-a-rectangle
-  let radial = function(z) {
-    //find relative angle in [0,2PI]
-    z = relativeAngle(z);
-    let a = width/2;
-    let b = height/2;
-
-    if ( Math.abs(Math.tan(z)) <= b/a) {
-      return a / Math.abs(Math.cos(z));
-    } else {
-      return b / Math.abs(Math.sin(z));
+      this.needsRedraw = (this.currentColor != this.type.color);
     }
   }
-  return radial;
-}
 
+  renderPath() {
 
-
-
-class hex {
-  static maxNeighbors = 6;
-  static interiorAngle = Math.PI/3; //60 degrees
-  constructor(cp,size,ctx) {
-    this.cp = cp;
-    //redundant , but will fix later
-    //i.e. cp and x and y
-    this.x = cp.x;
-    this.y = cp.y;
-    this.size = size;
-    //neighbors
-    this.neighbors = [];
-    this.tile = new emptyTile();
-    this.occupant = null;
-    this.ctx = ctx; 
-    //create the canvas path for drawing
     let path = new Path2D();
-    let offset = Math.PI/6;
     let vertices = [];
-    for ( let i = 0; i < 6; i++) {
-      let theta = (2*Math.PI*i/6) + offset  
-      let vx = this.x + this.size*Math.cos(theta);
-      let vy = this.y + this.size*Math.sin(theta);
+    for ( let i = 0; i < this.n; i++) {
+      let theta = (2*Math.PI*i/this.n) + this.rotOff;
+      let vx = this.cp.x + this.radius*Math.cos(theta);
+      let vy = this.cp.y + this.radius*Math.sin(theta);
       vertices.push([vx,vy]);
     }
     
     path.moveTo(vertices[0][0],vertices[0][1]); 
-    for ( let i = 1; i < 6; i++) {
+    for ( let i = 1; i < this.n; i++) {
       path.lineTo(vertices[i][0],vertices[i][1]);
     }
     path.lineTo(vertices[0][0],vertices[0][1]);
     this.path = path;
   }
 
+  //ad hoc tests
+  identify() {
+    this.ctx.fillRect(this.cp.x,this.cp.y,10,10);
+    this.neighbors.forEach( t => {
+      this.ctx.fillRect(t.cp.x,t.cp.y,10,10);
+    });
+  }
+}
+
+//////////////////////////
+// Terrain              //
+//////////////////////////
+
+
+// Terrain Types
+
+//64 phases of growth
+ const grain = [ '#884B11' , '#854C11' , '#834E11' , '#815011' , '#7F5211' , '#7D5412' , '#7B5612' , '#785712' ,
+                  '#765912' , '#745B13' , '#725D13' , '#705F13' , '#6E6113' , '#6B6213' , '#696414' , '#676614' ,
+                  '#656814' , '#636A14' , '#616C15' , '#5E6D15' , '#5C6F15' , '#5A7115' , '#587315' , '#567516' ,
+                  '#547716' , '#527916' , '#4F7A16' , '#4D7C17' , '#4B7E17' , '#498017' , '#478217' , '#458417' ,
+                  '#428518' , '#408718' , '#3E8918' , '#3C8B18' , '#3A8D19' , '#388F19' , '#359019' , '#339219' ,
+                  '#319419' , '#2F961A' , '#2D981A' , '#2B9A1A' , '#299C1A' , '#269D1B' , '#249F1B' , '#22A11B' , 
+                  '#20A31B' , '#1EA51B' , '#1CA71C' , '#19A81C' , '#17AA1C' , '#15AC1C' , '#13AE1D' , '#11B01D' , 
+                  '#0FB21D' , '#0CB31D' , '#0AB51D' , '#08B71E' , '#06B91E' , '#04BB1E' , '#02BD1E' , '#00BF1F'   ];
+
+class Grass {
+
+  constructor(t=5,hl=15,hr=.1,hm=100,hd = 1, com = 1) {
+    this.traversability =  t; 
+    this.harvestLevel   =  hl; 
+    this.harvestRate    =  hr; 
+    this.harvestMax     =  hm;
+    this.hydration      =  hd;
+    this.comfort        =  com;
+    this.kind = "grass";
+  }
+
   update() {
-    this.tile.update();
+    //grass tile
+    if (this.harvestLevel < this.harvestMax) {
+      this.harvestLevel += this.harvestRate;
+    }
+    if (this.harvestLevel > this.harvestMax) {
+      this.harvestLevel = this.harvestMax;
+    }
+    this.color = grain[Math.ceil( (this.harvestLevel / this.harvestMax)*grain.length )];
+  }
+}
+
+class Water {
+
+  constructor(t,hl,hr,hm,hd,com = 1) {
+    this.traversability =  t; 
+    this.harvestLevel   =  hl; 
+    this.harvestRate    =  hr; 
+    this.harvestMax     =  hm;
+    this.hydration      =  hd;
+    this.comfort        =  com;
+    this.kind = "water";
+
+    //depth derived from traversability
+    this.depth = this.traversability;
+
+    this.color = "rgb(0,0," + (255 - Math.floor(this.depth * 100)) + ")";
+
   }
 
-  //outline this hex
-  drawOutline() {
-    this.ctx.save();
-    this.ctx.stroke(this.path);
-    this.ctx.restore();
+  update() {
+    //NA static tile
+  }
+}
+
+//No hydration , no energy , high traversal cost
+class Rock {
+  constructor(t,hl,hr,hm) {
+    this.traversability = t; //1 < t < 100 How hard is it to get to this tile
+    this.harvestLevel   = hl; //what resources are currently available to consume
+    this.harvestRate    = hr; //How quickly resources regenerate
+    this.harvestMax     = hm;
+    this.hydration      =  1;
+    this.comfort        =  1;
+    this.kind = "rock";
+    this.color = "gray";
+
+    //depth derived from traversability
+    this.height = this.traversability;
+    let grayLevel = 155 - Math.floor( this.height * 100);
+    this.color = "rgb(" + grayLevel + "," + grayLevel + "," + grayLevel + ")";
+
   }
 
-  //given a color, fill this hex with that color
+  update() {
+    //NA static tile
+  }
+}
+
+////////////////////////////
+//Inhabitants
+////////////////////////////
+
+//Cows are doubly referenced between cow and tile
+class cow {
+  constructor(tile,env,size,color,name='roxxxane') {
+    this.tile = tile; //tile im located at all
+    this.env  = env;  //list of all tiles in the universe
+    this.size = size;
+    this.color = color;
+    this.name = name;
+    this.alive = true;
+    //this.ctx = cowCtx;
+    this.ctx = cowCtx;
+
+    //genetic attributes
+    this.energyCap = 100;  
+    this.hungerCap = 100;
+    this.emotionCap = 100;
+    this.hydrationCap = 100;
+
+    this.metabolicEff = 1; //easge of digestion
+    this.endurance    = 1; //ease of traversal
+    this.desiribility = 1; //likelihood of mating
+    this.nomadicity   = .5; //desire to migrate
+    this.hermitic     = 1; //desire to avoid others
+    this.urgency      = 1; //desire to mate
+    this.hostility    = 1; //likelihood of attacking others
+
+    //model variables
+    this.energy = 100; //physical health
+    this.hunger = 100; //energy in the body
+    this.emotion = 100; //social satisfaction 
+    // on social : nomads lose emotion when stuck in the same place
+    //           : hermits lose emotion when stuck with others
+    this.hydration = 100;
+
+    //audit
+    this.actionLog = [];
+    this.energyRestored = 0;
+    this.hungerRestored = 0;
+    this.hydrationRestored = 0;
+    this.tilesTraveled = 0;
+    this.ticks = 0;
+    this.causeOfDeath = null;
+
+    //state
+    this.stateTicks = 0; //how many ticks are left in this state
+    this.state = "idle";
+
+    this.facing = "north";  
+
+    this.anim = "idle";
+    this.animTicks = 0;
+    this.animCap = 4;
+
+	  this.path = new Path2D();
+	  this.path.arc(this.tile.cp.x,this.tile.cp.y,this.size,0,2*Math.PI);
+  }
+
   draw() {
+  }
+
+  //change the animation frame
+  //and draw to the canvas
+  animate() {
+    //console.log("cow animation + " + this.animTicks);
+    //body
+    /*
     this.ctx.save();
-    this.ctx.fillStyle = this.tile.style();
+    this.ctx.fillStyle=this.color;
     this.ctx.fill(this.path);
     this.ctx.restore();
-  }
-
-   getPoint() {
-     return this.cp;
-   }
-
-  //check equality by way of hex centerpoint
-  equals(h2) {
-    //console.log(h2);
-    //console.log(this);
-    return this.cp.equals(h2.cp);
-  }
-
-  //return a list of hex center points that neighbor this hex physically
-  neighborhood() {
-    let hcp  = this.cp;
-    let nbrs = [];
-    let hexGap = Math.sqrt(3)*this.size
-    for (let i = 0; i < 6;i++) {
-      let diffVector = p2r(hexGap,2*Math.PI*i/6);
-      let nx = hcp.x + diffVector.x;
-      let ny = hcp.y + diffVector.y;
-      let hcnp = new point(nx,ny);
-      nbrs.push(hcnp);
-    }
-    return nbrs;
-  }
-
-  
-}
-
-
-////////////////////////////////////
-//Unfinished Square Implementation//
-////////////////////////////////////
- 
-class square {
-  static maxNeighbors = 4;
-  static interiorAngle = Math.PI/2; //60 degrees
-  constructor(cp,size,ctx) {
-    this.cp = cp;
-    this.size = size;
-    //neighbors
-    this.neighbors = [];
-    this.tile = new emptyTile();
-    //this.offset = 7*Math.PI/4;  //straight up in pixel space
-    //45 degrees
-    this.offset = Math.PI/3;
-    this.ctx = ctx;
-  }
-
-  update() {
-    this.tile.update();
-  }
-
-  //outline this triangle
-  //distance from center to any vertex is a/sqrt(3)
-  drawOutline() {
-    //console.log("drawing triangle outline"); 
-    let vertices = [];
-    //drawCirc(this.cp.x,this.cp.y,5);
-    for ( let i = 0; i < 4; i++) {
-      let theta = (2*Math.PI*i/4) + this.offset  
-      let diffVector = p2r(this.size*Math.sqrt(.5),theta);
-      let vx = this.cp.x + diffVector.x;
-      let vy = this.cp.y + diffVector.y;
-      //drawCirc(vx,vy,3);
-      vertices.push([vx,vy]);
-    }
-    //console.log(vertices);
     this.ctx.save();
-    this.ctx.beginPath();
-    this.ctx.moveTo(vertices[0][0],vertices[0][1]); 
-    for ( let i = 1; i < 4; i++) {
-      this.ctx.lineTo(vertices[i][0],vertices[i][1]);
+    */
+
+    let sprWidth  = 128/4;
+    let sprHeight = 160/5;
+
+    let centeredx = this.tile.cp.x - sprWidth/2;
+    let centeredy = this.tile.cp.y - sprHeight/2;
+
+//    this.ctx.imageSmoothingQuality = 'high';
+    this.ctx.strokeRect(centeredx,centeredy,sprWidth,sprHeight);
+    this.ctx.drawImage(cowsprites,sprWidth*this.animTicks,sprHeight,sprWidth,sprHeight,centeredx,centeredy,sprWidth,sprHeight);
+
+    //draw a line indicating direction
+    let lx = 0;
+    let ly = 0;
+    let ll = 40;
+    if ( this.facing == "north" ) {
+      lx = this.tile.cp.x;
+      ly = this.tile.cp.y - ll;
+    } else if ( this.facing == "east" ) {
+      lx = this.tile.cp.x + ll;
+      ly = this.tile.cp.y;
+    } else if ( this.facing == "south") {
+      lx = this.tile.cp.x;
+      ly = this.tile.cp.y + ll;
+    } else {
+      lx = this.tile.cp.x - ll;
+      ly = this.tile.cp.y;
     }
-    this.ctx.lineTo(vertices[0][0],vertices[0][1]);
+   
+    this.ctx.save();
+    this.ctx.strokeStyle = "red";
+    this.ctx.lineWidth = 3;
+    this.ctx.beginPath();
+    this.ctx.moveTo(this.tile.cp.x,this.tile.cp.y);
+    this.ctx.lineTo(lx,ly);
+    this.ctx.closePath();
     this.ctx.stroke();
-    this.ctx.closePath();
+    this.ctx.restore();
+
+
+    this.animTicks = (this.animTicks + 1) % this.animCap;
+    //console.log("internal anim ticks" , this.animTicks);
+
+
+    //info bars
+    this.ctx.fillStyle = "green";
+    this.ctx.fillRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*2.25,(this.energy/this.energyCap)*this.size*2,5);
+    this.ctx.strokeRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*2.25,this.size*2,5);
+    this.ctx.fillStyle = "orange";
+    this.ctx.fillRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*2.5,(this.hunger/this.hungerCap)*this.size*2,5);
+    this.ctx.strokeRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*2.5,this.size*2,5);
+    this.ctx.fillStyle = "yellow";
+    this.ctx.fillRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*2.75,(this.emotion/this.emotionCap)*this.size*2,5);
+    this.ctx.strokeRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*2.75,this.size*2,5);
+    this.ctx.fillStyle = "blue";
+    this.ctx.fillRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*3,(this.hydration/this.hydrationCap)*this.size*2,5);
+    this.ctx.strokeRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*3,this.size*2,5);
+    this.ctx.fillStyle = "black";
+    this.ctx.font = '20px monospace';
+    this.ctx.fillText(this.name , this.tile.cp.x - this.size, this.tile.cp.y - this.size*3.25);
     this.ctx.restore();
   }
 
+  //consider th state and the environmnet, what action will I take
+  //Idle , Rest, Fight, Fuck, Eat, Move
+  //simple subset , Idle, Rest, Eat , Move
+  imperative() {
+    this.ticks++;
 
-  draw() {
-    //console.log("square"); 
-    this.ctx.fillStyle = this.tile.style();
-    let vertices = [];
-    for ( let i = 0; i < 4; i++) {
-      let theta = (2*Math.PI*i/4) + this.offset  
-      let diffVector = p2r(this.size*Math.sqrt(.5),theta);
-      let vx = this.cp.x + diffVector.x;
-      let vy = this.cp.y + diffVector.y;
-      vertices.push([vx,vy]);
+    //what actions are physically possible
+
+    let idle = 1;
+    let rest = 1;
+    let eat =  1;
+    let move = 1;
+    let drink = 1;
+
+    //can I sleep?
+    if ( this.tile.type.comfort == 0 ) {
+      rest = 0;
     }
-    //console.log(vertices);
-    this.ctx.save();
-    this.ctx.beginPath();
-    this.ctx.moveTo(vertices[0][0],vertices[0][1]); 
-    for ( let i = 1; i < 4; i++) {
-      this.ctx.lineTo(vertices[i][0],vertices[i][1]);
+
+    //can I move?
+    let vacancy = this.tile.neighbors.filter( n => {
+      if (n.occupant == null) {
+        return true;
+      } 
+      return false;
+    }).length;
+
+    //No if no space, or insufficient energy
+    //10 should be replaced with a flat move cost minimum
+    if (vacancy == 0 || this.energy < 10) {
+      move = 0;
     }
-    this.ctx.lineTo(vertices[0][0],vertices[0][1]);
-    this.ctx.fill();
-    this.ctx.closePath();
-    this.ctx.restore();
-
-    this.drawOutline();
-  }
-
-   getPoint() {
-     return this.cp;
-   }
-
-  //check equality by way of hex centerpoint
-  equals(h2) {
-    //console.log(h2);
-    //console.log(this);
-    return this.cp.equals(h2.cp);
-  }
-
-  //return a list of hex center points that neighbor this hex physically
-  neighborhood() {
-    let nbrs = [];
-    let gap = this.size
-    for (let i = 0; i < 4;i++) {
-      //offset point to first vertex, then PI/3 = 60* to middle of edge
-      let diffVector = p2r(gap,this.offset+Math.PI/4+Math.PI/2*i);
-      let nx = this.cp.x + diffVector.x;
-      let ny = this.cp.y + diffVector.y;
-      //drawCirc(nx,ny,5);
-      let tcp = new point(nx,ny);
-      nbrs.push(tcp);
-    }
-    return nbrs;
-  }
-}
-
-
-
-////////////////////////////////////
-//Unfinished Triangle Implementation
-////////////////////////////////////
-
-/*
  
-//One hiccup in this generalization, 
-//triangles, unlike hexagons, and squares will have
-//alternating orientations. thus requires an offest
-//I will table this for now
- 
-class triangle {
-  static maxNeighbors = 3;
-  static interiorAngle = 2*Math.PI/3; //60 degrees
-  constructor(cp,size,ctx) {
-    this.cp = cp;
-    this.size = size;
-    //neighbors
-    this.neighbors = [];
-    this.tile = new emptyTile();
-    this.offset = 3*Math.PI/2;  //straight up in pixel space
-  }
-
-  update() {
-    this.tile.update();
-  }
-
-  //outline this triangle
-  //distance from center to any vertex is a/sqrt(3)
-  drawOutline() {
-    //console.log("drawing triangle outline"); 
-    let vertices = [];
-    //drawCirc(this.cp.x,this.cp.y,5);
-    for ( let i = 0; i < 3; i++) {
-      let theta = (2*Math.PI*i/3) + this.offset  
-      let diffVector = p2r(this.size/Math.sqrt(3),theta);
-      let vx = this.cp.x + diffVector.x;
-      let vy = this.cp.y + diffVector.y;
-      //drawCirc(vx,vy,3);
-      vertices.push([vx,vy]);
+    //Can I eat? - set minimum deficit to 10%
+    /*
+    if (this.hunger/this.hungerCap > .90) {
+      eat = 0;
     }
-    //console.log(vertices);
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(vertices[0][0],vertices[0][1]); 
-    for ( let i = 1; i < 3; i++) {
-      ctx.lineTo(vertices[i][0],vertices[i][1]);
+    */
+    if (this.hunger >= this.hungerCap) {
+      eat = 0;
     }
-    ctx.lineTo(vertices[0][0],vertices[0][1]);
-    ctx.stroke();
-    ctx.closePath();
-    ctx.restore();
-  }
 
-  //given a color, fill this hex with that color
-  draw() {
-    //ask the underlying tile type, what to color myself
-    ctx.fillStyle = this.tile.style();
-    let offset = Math.PI/6;
-    let vertices = [];
-    for ( let i = 0; i < 6; i++) {
-      let theta = (2*Math.PI*i/6) + offset  
-      let vx = this.x + this.size*Math.cos(theta);
-      let vy = this.y + this.size*Math.sin(theta);
-      vertices.push([vx,vy]);
+    //Can I drink ?
+    if (this.hydration >= this.hydrationCap ||
+        this.tile.hydration == 0) {
+      drink = 0;
     }
-    ctx.save();
-    ctx.moveTo(vertices[0][0],vertices[0][1]); 
-    for ( let i = 1; i < 6; i++) {
-      ctx.lineTo(vertices[i][0],vertices[i][1]);
+
+
+    //assign raw scores for each action that is valid
+    if (rest != 0) {
+      //set rest score
+      //energy depletion gives a scale of 100 votes
+      let depleteFactor = 100*((this.energyCap - this.energy)/this.energyCap);
+
+      ///
+      rest = depleteFactor;
     }
-    ctx.lineTo(vertices[0][0],vertices[0][1]);
-    ctx.fill();
-    ctx.restore();
+    if (eat  != 0) {
+      //set eat score
+      let hungerFactor = 100*((this.hungerCap - this.hunger)/this.hungerCap);
 
-    //and draw outline
-    this.drawOutline();
-
-  }
-
-   getPoint() {
-     return this.cp;
-   }
-
-  //check equality by way of hex centerpoint
-  equals(h2) {
-    //console.log(h2);
-    //console.log(this);
-    return this.cp.equals(h2.cp);
-  }
-
-  //return a list of hex center points that neighbor this hex physically
-  neighborhood() {
-    let nbrs = [];
-    let hexGap = 1/Math.sqrt(12)*this.size*2;
-    for (let i = 0; i < 3;i++) {
-      //offset point to first vertex, then PI/3 = 60* to middle of edge
-      let diffVector = p2r(hexGap,this.offset+Math.PI/3+(2*Math.PI*i/3));
-      let nx = this.cp.x + diffVector.x;
-      let ny = this.cp.y + diffVector.y;
-      //drawCirc(nx,ny,5);
-      let tcp = new point(nx,ny);
-      nbrs.push(tcp);
+      //
+      eat = hungerFactor;
     }
-    return nbrs;
-  }
-}
+    if (move != 0) {
+      //set move score
+      //nomadicty gets a scale of 40 votes
+      let nomadicFactor = 50 * this.nomadicity;
 
-*/
+      ////
+      move = nomadicFactor;
+    }
 
-//Given a polar parameterization of a closed curve, 
-//A center point, and a hexsize, construct a hex tiling
-//radiating from the center point, such that the center points of 
-//all generated hexes fall within the boundary of the given curve
-class grid {
 
-  constructor(curve,shape,size,ctx) {
-    this.ctx = ctx;
-    //Center of bounding box
-    this.cp = curve.center;
-    //draw the bounding curve
-    this.curve = curve;
-    this.curve.draw(1,1000);
+    if (drink != 0) {
+      //set drink score
+      drink = 100*((this.hydrationCap - this.hydration)/this.hydrationCap);
+    }
 
-    //the constructor of the tiling shape
-    this.shape = shape;
 
-    this.size = size;
+    //normalize votes
+    let total_score = move + eat + rest + drink + idle;
+    move = move/total_score;
+    eat  = eat/total_score;
+    rest = rest/total_score;
+    drink = drink/total_score
+    idle  = idle/total_score;
 
-    this.centerShape = new this.shape(this.cp,size,ctx);
-    this.centerShape.drawOutline();
+    //pick action
+    let chance = Math.random();
+    let choice = null;
 
-    this.debugCounter = 0;
-    this.oobCounter = 0;
-
-    var closed = [];
-
-    var frontier = [];
-    frontier.push(this.centerShape);
-
-    [this.frontier,this.closed] = this.tileFill(frontier,closed);
-
-  }
-
-  //determine whether this hexes center is between the bounding box
-  //I should generalize so that inBounds can be given a closed non-intersecting
-  //path to generate hexgrids of any shape.
-  inBounds(hcp) {
-
-    //get the distance vector from the center point
-    hcp = hcp.sub(this.cp);
-
-    //convert hcp to polar
-    let phcp = r2p(hcp);
-
-    //if the curve's radius at theta is larget than 
-    //this hexes distance from the center hex, then it's inside
-    if ( phcp.x <= this.curve.radial(phcp.y) ) {
-      return true;
+    if ( chance < move) {
+      choice = "move"; 
+    } else if ( chance < move + eat) {
+      choice = "eat";
+    } else if (chance < move + eat + rest){
+      choice = "rest";
+    } else if (chance < move + eat + rest + drink){
+      choice = "drink";
     } else {
-      return false
+      choice = "idle";
     }
- }
+
+    return choice;
 
 
-  // 0 -> 2*Math.PI*5/6
-  tileFill(frontier,closed) {
-
-    //nothing left to explore
-    if (frontier.length == 0 ) {
-      if (frontier.length != 0) {
-      }
-      return [frontier,closed];
-
-    //check for new valid neighbors in the frontier
-    } else {
-      //get a copy of the frontier
-      let newFrontier = [];
-      //iterate through the current frontier and find all valid neighbors
-      frontier.forEach( tcp => {
-        //add all valid neighbors to the frontier
-        //get all physically valid neighboring hexes
-        var tncp = tcp.neighborhood();
-        var tmcp = [];
-        //sort out neighbors that are not inbounds
-        tncp.forEach( t => {
-         if (this.inBounds(t)) {
-           tmcp.push(t);
-         }
-        });
-
-        //determine if these hexes have been visited before, or are
-        //queued to be visited
-        tmcp.forEach( tmcpn => {
-          
-          //check if this point exists in closed
-          //this will check all values
-          //.every is like .forEach but will terminate if a false value is returned
-         
-          //does this hex point exist in closed?
-          var closedIndex = -1;
-          for ( let i = 0; i < closed.length; i++) {
-            if ( closed[i].cp.equals(tmcpn)) {
-              closedIndex = i;
-            }
-          }
-          
-          //does this hex point exist in the frontier?
-          var frontIndex = -1;
-          for ( let i = 0; i < frontier.length; i++ ) {
-            if ( frontier[i].cp.equals(tmcpn)) {
-              frontIndex = i; 
-            }
-          }
-
-          //does this hex point exist in the new frontier?
-
-          var newFrontIndex = -1;
-          for ( let i = 0; i < newFrontier.length; i ++) {
-            if ( newFrontier[i].cp.equals(tmcpn)) {
-              newFrontIndex = i;
-            }
-          }
-
-          let notFoundInClosed = (closedIndex == -1);
-          let notInFrontier = (frontIndex  == -1);
-          let notInNewFrontier = ( newFrontIndex == -1);
-
-          //Find the hex node, if it already exists
-          //and assign the root node its reference
-          if (!notFoundInClosed) {
-            tcp.neighbors.push(closed[closedIndex]); 
-          }
-
-          if (!notInFrontier) {
-            tcp.neighbors.push(frontier[frontIndex]);
-          }
-
-          if (!notInNewFrontier) {
-            tcp.neighbors.push(newFrontier[newFrontIndex]);
-          }
-
-
-          //neighbor doesn't exist, add to the frontier
-          //assign reference to root node
-          if (notFoundInClosed && notInFrontier && notInNewFrontier) {
-            let newTile = new this.shape(tmcpn,this.size,this.ctx);
-            tcp.neighbors.push(newTile);
-            newFrontier.push(newTile);
-          }
-       });
-      });
-      
-      //remove oldFrontier values from new frontier
-      //add them to the closed
-      frontier.forEach( hcp => {
-        closed.push(hcp);
-      });
-
-      //recurse
-      this.debugCounter++;
-      return this.tileFill(newFrontier,closed);
-    }
   }
 
-  //@precondition : tileFill has been called
-  //remove tiles from the grid at random, bias removal towards the center of the grid
-  //i.e. lower indices
-  //sparsity -> percentage of tiles to remove
-  randomRemoval(sparsity) {
-    if ( sparsity < 0 || sparsity > 1) {
-      console.warn("invalid sparsity for grid random removal");
-    }
-    //this.closed
-    let quota = Math.floor(this.closed.length*sparsity);
-    while (quota != 0) {
-      let kill = Math.floor(Math.random()*this.closed.length);
-      let dead = (this.closed.splice(kill,1));
-      dead = dead[0];
-      ctx.fillRect(dead.cp.x,dead.cp.y,10,10);
-      console.log(dead);
-      //remove this tile's neighbors references to this tile.
-      dead.neighbors.forEach( n => {
-        let deadReferenceIndex = n.neighbors.indexOf(dead);
-        if (deadReferenceIndex == -1) {
-          console.log("houston we have a problem");
+  //precondition moves are available
+  move() {
+      let moves = []
+      this.tile.neighbors.forEach( n => {
+        if ( n.occupant == null ) {
+          moves.push(n);
         }
-        n.neighbors.splice(deadReferenceIndex);
-      }); 
+      });
+
+      let dir = Math.floor( Math.random() * moves.length);
+      //let tile know I left
+      this.tile.occupant = null;
+
+      //update facing based on old tile and previous
+      //find which direction up down left right , has the smallest angle with the vector
+      //generated between the old and previous tile
+      //let dirVec = new point(moves[dir].cp.x - this.tile.cp.x ,moves[dir].cp.y - this.tile.cp.y)
+
+      let dirVec = new point(this.tile.cp.x - moves[dir].cp.x ,this.tile.cp.y - moves[dir].cp.y)
+
+    
+      let angleDirs = [];
+      angleDirs.push({ dir: "north" , dist : vecAngle(dirVec,new point(0,1)) } ); //north
+      angleDirs.push({ dir: "east" , dist : vecAngle(dirVec,new point(1,0)) } ); //north
+      angleDirs.push({ dir: "south" , dist : vecAngle(dirVec,new point(0,-1)) } ); //north
+      angleDirs.push({ dir: "west" , dist : vecAngle(dirVec,new point(-1,0)) } ); //north
+      let closest = 0;
+      for ( let i = 0; i < angleDirs.length; i++ ) {
+        if (angleDirs[i].dist < angleDirs[closest].dist) {
+          closest = i;
+        }
+      }
+      this.facing = angleDirs[closest].dir;
       
-      quota--;
+
+      //remind myself where I am
+      this.tile = moves[dir];
+
+      //10 would be max travel cost 
+      //and is discounted by traversability and cows endurance
+      //cap endurant discount at .05, means that .95 -> 1 has no difference ...
+      this.energy -= this.tile.type.traversability*10*( Math.max((1-this.endurance),.05) );
+      //let tile now I'm here
+      this.tile.occupant = this;
+
+      //update the rendering path for the cow
+      this.path = new Path2D();
+      this.path.arc(this.tile.cp.x,this.tile.cp.y,this.size,0,2*Math.PI);
+
+
+      //dispatch a visual indicator of event
+      this.ctx.fillStyle = "red";
+      this.ctx.font = '12px monospace';
+      this.ctx.fillText("Moooo" , this.tile.cp.x - this.size, this.tile.cp.y - this.size*4);
+
+      //update audit
+      this.tilesTraveled++;
+
+
+      //state housekeeping
+      this.state = "move";
+      this.stateTicks = 2;
+      this.subTicks   = 0; //time inbetween ticks used for animation.
+
+  }
+
+  rest() {
+    if (this.energy < this.energyCap) {
+      //10 is base
+      let energyBack = 10 * (this.tile.type.comfort);
+      if (this.energyCap < this.energy + energyBack) {
+        energyBack -= ( this.energy + energyBack - this.energyCap);
+      }
+      this.energy+=energyBack;
+
+      //dispatch a visual indicator of event
+      this.ctx.fillStyle = "red";
+      this.ctx.font = '12px monospace';
+      this.ctx.fillText("zzZzzZZ" , this.tile.cp.x - this.size, this.tile.cp.y - this.size*4);
+
+      //audit
+      this.energyRestored += energyBack;
+
+      //state housekeeping
+      this.state = "rest";
+      this.stateTicks = 8;
+
     }
   }
 
+  consume() {
+    if ( this.tile.type.harvestLevel != 0) {
+      //Defecit
+      let meal = 15;
+      if ( meal > this.tile.type.harvestLevel ) {
+        meal = this.tile.type.harvestLevel;
+      }
+  
+      if (this.hungerCap - (this.hunger + meal) < 0) {
+        meal = (this.hunger + meal - this.hungerCap);
+      }
 
-  //pick out random patches of tile, such that
-  //of varying size until the sparsity quota has been meet
-  //should be able to specify level of recursion or recursion range
-  //and sparsity, how to satisfy both?
-  patchRemoval(sparsity) {
+      this.hunger += meal;
+      this.tile.type.harvestLevel -= meal;
+
+      //dispatch a visual indicator of event
+      this.ctx.fillStyle = "red";
+      this.ctx.font = '12px monospace';
+      this.ctx.fillText("munch" , this.tile.cp.x - this.size, this.tile.cp.y - this.size*4);
+
+      //audit
+      this.hungerRestored += meal;
+
+      this.state = "eat";
+      this.stateTicks = 3;
+
+    }
+
+
+      
+  }
+
+  idle() {
+    this.state = "idle";
+    this.stateTicks = 1;
   }
 
 
+  drink() {
+    if ( this.tile.type.hydration != 0) {
+      let sipBase = 8;
+      let sip = sipBase * this.tile.type.hydration;
+      if (this.hydration + sip > this.hydrationCap ) {
+        sip = this.hydration + sip - this.hydrationCap;
+      }
+      this.hydration += sip;
+
+      //dispatch a visual indicator of event
+      this.ctx.fillStyle = "red";
+      this.ctx.font = '12px monospace';
+      this.ctx.fillText("slurp" , this.tile.cp.x - this.size, this.tile.cp.y - this.size*4);
+
+      //audit
+      this.hydrationRestored += sip;
+
+      this.state = "eat";
+      this.stateTicks = 2;
+
+    }
+  }
 
 
   update() {
-    this.closed.forEach( tile => {
-      tile.update();
-    });
-  }
 
-  draw() {
-    this.closed.forEach( tile => {
-      tile.draw();
-      //draw border
-      tile.drawOutline();
-    });
-  }
-}
-
-
-//Curve factories
-ccrad = closedCurveFactory(2,6,-1,4,7,8,1000);
-rectRad = rectRadialFactory(100,100);
-
-//parametric closed curve initialization
-c1 = new curve(new point(width/5,height/2),ccrad,ctx);
-c1.setScale(1.2);
-
-//rectangle curve
-//r1 = new curve(new point(width/5,height/2),rectRad,ctx);
-
-//construct hex and squares to reference constrcutors for
-//grid function
-dummyhex = new hex(new point(-5000,-5000),0,ctx);
-dummySquare = new square(new point(-5000,-5000),0,ctx);
-
-hexCon = dummyhex.constructor;
-squareCon = dummySquare.constructor;
-
-
-//Make a a grid of hexes (with hex constructor)
-//that is bound by the closed curve c1.
-let sparsity = Math.random()*5 / 10;
-hg = new grid(c1,hexCon,60,ctx);
-//random removal
-hg.randomRemoval(sparsity);
-//hg = new grid(c1,squareCon,25,ctx);
-
-//for each tile in the grid assign it a grassTile type
-hg.closed.forEach( hex => { hex.tile = new grassTile();});
-console.log("hg closed");
-console.log(hg.closed);
-
-
-
-/////////////////////////////
-//Initialize a batch of cows
-/////////////////////////////
-
-cows = [];
-numCows  = 1;
-for (let i = 0; i < numCows; i++) {
-  //pick random unoccupied spots
-  let index = 0;
-  let unoc = false;
-  let debug = 0;
-  while (!unoc) {
-    index = Math.floor(Math.random()*hg.closed.length);
-    if (hg.closed[index].occupant == null) {
-      unoc = true;
+    if (!this.alive) {
+      return
     }
-    debug++;
 
-    if (numCows > hg.closed.length) {
-      console.warn("not enough tiles for requested cows");
-    }
-  }
-  console.log("yay cow");
-  /*
-  let r = Math.random()*255;
-  let g = Math.random()*255;
-  let b = Math.random()*255;
-  */
+    this.ticks++;
+    if (this.stateTicks != 0) {
+      this.stateTicks--;
+    } 
 
-  //intense colors
-  let r = Math.random()*125;
-  let g = Math.random()*125;
-  let b = Math.random()*125;
+    //only change state of current state is finished
+    if (this.stateTicks == 0) {
 
-
-  let happyCow = new cow(hg.closed[index],25,'rgb('+r+','+g+','+b+')',ctx); 
-  happyCow.node.occupant = happyCow;
-  cows.push(happyCow);
-}
-
-console.log(cows);
-
-
-
-/////////////////////////////////
-//Update loop for cows and tiles
-/////////////////////////////////
-
-let updateTiles = function () {console.log("clear all"); ctx.clearRect(0,0,width,height); hg.update(); hg.draw(); cows.forEach( cw => {
-  cw.update();
-  cw.draw();
-
-  //ctx.fillRect(100,100,10,10);
-
-  //ctx.fillRect(800,800,10,10);
-
-});};
-
-
-
-//setInterval(updateTiles,2000);
-setInterval(updateTiles,500);
-
-//Check if the click hits the bounding area of a cow, to pull up information
-//about that cow.
-canvas.addEventListener('click', function(event) {
-  //console.log(event.offsetX," ",event.offsetY);
-  //draw a rect where the click is 
-  ctx.fillRect(event.offsetX,event.offsetY,10,10);
-
-  //check where the click is
-  cows.forEach( cw => {
-    //determine if the click is inside the path of the cows bounding curve
-    if (ctx.isPointInPath(cw.path, event.offsetX,event.offsetY)) 
-      {
-        console.log("a cow was clicked", cw);
-        ctx.stroke(cw.path);
+      let action = this.imperative();
+      //console.log(this.name + " " + action);
+      if (action == "eat") {
+        this.consume();  
+        this.actionLog.push("eat");
+      } else if ( action == "rest" ) {
+        this.rest();
+        this.actionLog.push("rest");
+      } else if ( action == "move" ) {
+        this.move();
+        this.actionLog.push("move");
+      } else if ( action == "drink" ) {
+        this.drink();
+        this.actionLog.push("drink");
+      } else if ( action == "idle") {
+        this.idle();
+        this.actionLog.push("idle");
       }
-  });
+
+
+    }
+
+    // TODO
+    //Biological consequences should be affected by the environment
+
+
+    //Biological consequences
+
+    //Ever update hunger is depleted.
+    this.hunger--;
+    this.energy--;
+    this.hydration--;
+
+    // if hunger is severly low , energy is affected more drastically
+    let hungerSeverity = 5 - Math.floor( (this.hunger / this.hungerCap)*10);
+    //every 10 percentage energy loss below 5, results in n times more energy depleted.
+    if ( hungerSeverity > 0) {
+      this.energy -= hungerSeverity;
+    }
+
+    //////////////////////
+    //Death conditions
+    //////////////////////
+
+    //Hunger
+    if (this.hunger <= 0) {
+        this.alive = false;
+        this.causeOfDeath = "Starvation";
+    }
+    //general life force
+    if (this.energy <= 0) {
+        this.alive = false;
+        this.causeOfDeath = "Collapse";
+    }
+    //Hydration
+    if (this.hydration <= 0){
+        this.alive = false;
+        this.causeOfDeath = "Dehydration";
+    }
+
+    ///////////////
+    //Death
+    ///////////////
+
+    if (!this.alive) {
+      this.tile.occupant = null;
+      console.log(this.name + " has passed ");
+      console.log("Actions");
+      console.log(this.actionLog);
+
+      console.log("Energy Restored : " + this.energyRestored);
+      console.log("Hunger Restored : " + this.hungerRestored);
+      console.log("Hydration Restored : " + this.hydrationRestored);
+      console.log("Tiles Traveled : " + this.tilesTraveled);
+      console.log("Ticks : " + this.ticks);
+      console.log("Cause of Death : " + this.causeOfDeath);
+    }
+
+    //requst drawing
+    this.draw();
+  }
+
+
+
+}
+
+
+
+////////////////////////////////////
+//World Building
+////////////////////////////////////
+
+
+//take a list of tiles, a list of tiles, and a bounding rectangle,
+//with a limit counter, and tile the rectangular domain with adjacent
+//tiles : only applies to tiles of degree 3 , 4 , or 6
+//return  list of list where the closed has a connected set of tiles
+//Note ! note not torudal
+let fill = function(frontier,closed,width,height,x,y,debug=0) {
+
+  if (frontier.length == 0 || debug == 50) {
+    console.log("frontier closed");
+    if ( frontier.length != 0 ) {
+      console.log("search aborted");
+    }
+    return [frontier,closed];
+  } else {
+
+    //retrieve a prototype from the frontier learn about tiling
+    //to be performed.
+    let proto = frontier[0];
+    //ensure a valid degree of tile is the prototype
+    if (proto.n != 3 && proto.n !=4 && proto.n != 6) {
+      console.warn("fill function is only applicable to Tile with degrees 3,4 or 6");
+      return [];
+    }
+
+    let newFrontier = [];
+    //get all neighboring center points that fall within the bounds 
+    //of landscape rectangle
+    frontier.forEach( tile => {
+      //get all neighboring center points that fall within the bounds 
+      //of landscape rectangle
+      //compute neighboring tiles based on the n and a
+      //new cp of adjacecent tiling will be 2 radius of proto tile's polygon.
+      
+      for ( let i = 0; i < proto.n; i++ ) {
+        let internalOffset = Math.PI/proto.n;
+        let theta = (2*Math.PI*i/proto.n) + tile.rotOff + internalOffset;
+        console.log(internalOffset);
+        /*
+        if ( proto.n == 3 ) {
+          theta = ( 2*Math.PI*i/proto.n) + tile.rotOff + internalOffset;
+        }
+        */
+
+        let vx = tile.cp.x + 2*tile.apothem*Math.cos(theta); 
+        let vy = tile.cp.y + 2*tile.apothem*Math.sin(theta);
+
+        /*
+        ctx.save();
+        ctx.moveTo(tile.cp.x,tile.cp.y);
+        ctx.lineTo(vx,vy);
+        ctx.stroke();
+        */
+
+        //console.log(vx,vy);
+        //only consider centerpoints that fall within bounding rectangle
+        if ( vx >= x && vx <= x + width && vy >= y && vy <= y + height) {
+          //console.log("passing landscape boundary check");
+          //only consider potential tiles that are not already in the closed,
+          //or in the new frontier
+          let vxy = new point(vx,vy);
+
+          let overlap = false;
+
+          //check for existence in the closed
+          let closedIndex = -1;
+          for ( let j = 0; j < closed.length; j++) {
+            if ( closed[j].cp.equals(vxy) ) {
+              closedIndex = j;
+            }
+            if (Math.abs(closed[j].cp.sub(vxy)) < 2*tile.apothem) {
+              overlap = true;
+            }
+          }
+          //check for existence in new frontier
+          let newFrontierIndex = -1;
+          for ( let j = 0; j < newFrontier.length; j++) {
+            if ( newFrontier[j].cp.equals(vxy) ) {
+              newFrontierIndex = j;
+            }
+            if (Math.abs(newFrontier[j].cp.sub(vxy)) < 2*tile.apothem) {
+              overlap = true;
+            }
+          }
+
+          //check for existence in current frontier
+          let frontierIndex = -1;
+          for ( let j = 0; j < frontier.length; j++) {
+            if ( frontier[j].cp.equals(vxy) ) {
+              frontierIndex = j;
+            }
+            if (Math.abs(frontier[j].cp.sub(vxy)) < 2*tile.apothem) {
+              overlap = true;
+            }
+          }
+
+          if ( closedIndex == -1 && 
+               newFrontierIndex == -1 &&
+               frontierIndex == -1    &&
+               !overlap) {
+
+               //need to add adjacency (linking to new tiles tbd);
+               //let newTile = new Tile(vxy,proto.n,proto.area,theta,null);
+               //adjust new offset for triangular tiles, otherwise for squares and rectangles
+               //offset is just propagated.
+               let newRotOff = theta;
+               if ( tile.n != 3 ) {
+                 newRotOff = tile.rotOff;
+               }
+               let newTile = new Tile(vxy,proto.n,proto.area,newRotOff,null);
+               tile.neighbors.push(newTile);
+               newTile.neighbors.push(tile);
+               newFrontier.push(newTile);
+               //ctx.fillRect(vx,vy,10*debug,10*debug);
+               //ctx.fillRect(vx,vy,10,10);
+          } else if (frontierIndex != -1)  {
+            //link the tile we branch from with the found tile in the current frontier
+            //it already exists but has incomplete neighbor data
+            let foundButNotConnected = frontier[frontierIndex];
+            tile.neighbors.push(foundButNotConnected);
+            foundButNotConnected.neighbors.push(tile);
+          } else if (newFrontierIndex != -1) {
+            let foundButNotConnected = newFrontier[newFrontierIndex];
+            tile.neighbors.push(foundButNotConnected);
+            foundButNotConnected.neighbors.push(tile);
+          }
+
+        }
+      }
+
+    });
+
+      //end of prospecting
+      frontier.forEach( tile => {
+        closed.push(tile);
+      });
+      debug++;
+      return fill(newFrontier,closed,width,height,x,y,debug);
+  }
+}
+
+
+//Construct a world boundary and fill it with tiles.
+//first tile placement
+let cp = new point(100,100);
+let tt = new Tile(cp,6,720*2,Math.PI/2,null);
+
+//tiling
+
+let landScapeWidth = 800;
+let landScapeHeight = 600;
+
+//illustrate world boundary
+//mapCtx.strokeRect(cp.x,cp.y,landScapeWidth,landScapeHeight)
+
+//fill out boundary with tiles
+let frontier = [];
+let closed = [];
+frontier.push(tt);
+[frontier,closed] = fill(frontier,closed,landScapeWidth,landScapeHeight,cp.x,cp.y);
+console.log(closed);
+
+///////////////////////////////
+// Apply Terrain to the tiles
+///////////////////////////////
+
+closed.forEach( t => {
+  let tv = .2; //traversability
+  let hl = Math.random()*30; //harvest level
+  let hr = (Math.random()*4)*(.01); //harvest rate
+  let hm = 100; //max harvest
+  let hd = .2; //hydration
+  let com = .4; //comfort
+  t.type = new Grass(tv,hl,hr,hm,hd,com);
 });
 
-console.log(canvas);
+//Apply random water tiles
+let wrate = .55
+closed.forEach( t => {
+  if (Math.random() < wrate) {
+    let tv = Math.random()*(.6) + .2; //traversability water can be .2 to .8
+    let hl = Math.random()*30; //harvest level
+    let hr = (Math.random()*4)*(.01); //harvest rate
+    let hm = 100; //max harvest
+    let hd = 1; //hydration
+    let com = 0; //comfort
+    t.type = new Water(tv,hl,hr,hm,hd,com);
+  }
+});
+
+let rrate = .4;
+closed.forEach( t => {
+  if (Math.random() < rrate) {
+    let tv = Math.random()*.3 + .2
+    let hl = 0; //harvest level
+    let hr = 0; //harvest rate
+    let hm = 0; //max harvest
+    let hd = 0; //hydration
+    let com = .8; //comfort
+    t.type = new Rock(tv,hl,hr,hm,hd,com);
+  }
+});
+
+
+//////////////////////
+// Cow instanatiation
+//////////////////////
+
+const names = [ "spark" , "cherry" , "plop", "ting" , "rocky", "spuck",
+                "wop"   , "slop"   , "pog" , "glop" , "spur" , "whisp",
+                "tuna"  , "gorsh"  , "mil" , "tran" , "sorch", "bash" ,
+                "grass" , "rock" , "fire" , "light" , "wet"  , "twig" ,
+                "plain" , "valley" , "hill" , "beach" , "dry" , "mad" ];
+
+let cows = [];
+let graveyard = [];
+let count = 10;
+for ( let i = 0; i < count; i++ ) {
+  let r = Math.random()*100 + 155;
+  let g = Math.random()*100 + 155;
+  let b = Math.random()*100 + 155;
+  let color = "rgb(" + r + "," + g + "," + b +")";
+  let name = names[Math.floor(Math.random()*names.length)];
+  let startFound = false;
+  while (!startFound) {
+    let tileIndex = Math.floor(Math.random()*closed.length);
+    let tile = closed[tileIndex];
+    if (tile.occupant == null) {
+      startFound = true;
+      cows.push( new cow(tile,closed,20,color,name));
+    }
+  }
+}
+console.log(cows);
+
+let tilesUpdate = function () {
+  closed.forEach( c => {
+    c.update();
+    //c.renderPath();
+    /*
+    if ( c.needsRedraw ) {
+      c.draw();
+    }
+    */
+  });
+}
+
+let cowsUpdate = function () {
+  cows.forEach( c => {
+    c.update();
+    //c.draw();
+  });
+  //remove any dead cows
+  let dead = [];
+  for ( let i = 0; i < cows.length; i++) {
+    if (!cows[i].alive) {
+      dead.push(i);
+      graveyard.push(cows[i]);
+    }
+  }
+  let removed = 0;
+  dead.forEach( d => {
+    cows.splice(d-removed,1);
+    removed++;
+  });
+}
+
+
+
+let cowAnimation = function() {
+  cowCtx.clearRect(0,0,1920,1080);
+  cows.forEach( c => {
+    c.animate();
+  });
+}
+
+
+let updateCall = function() {
+  
+  //console.log("updating");
+  if ( cows.length == 0 ) {
+    clearInterval(id);
+    console.log(graveyard);
+  }
+
+  mapCtx.clearRect(0,0,1920,1080);
+  tilesUpdate();
+
+  let frames = 10;
+  for ( let i = 0; i < frames; i++) {
+    setTimeout(cowAnimation,(tick/frames)*i);
+  }
+  cowsUpdate();
+}
+
+let id = setInterval(updateCall,tick);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

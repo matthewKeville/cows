@@ -1,17 +1,11 @@
 //Set Canvas and Viewport dimensions
 const cowCanvas = document.querySelector('#cowCanvas');
 const mapCanvas = document.querySelector('#mapCanvas');
-const entityCanvas = document.querySelector('#entityCanvas');
-//const width = cowCanvas.width = mapCanvas.width = window.innerWidth;
-//const height = cowCanvas.height = mapCanvas.height = window.innerHeight;
-const width = cowCanvas.width = mapCanvas.width = window.innerWidth*.67;
-const height = cowCanvas.height = mapCanvas.height = window.innerHeight*.9;
-const entityWidth = entityCanvas.width = window.innerWidth*.30;
-const entityHieght = entityCanvas.height = window.innerHeight*.70;
+const width = cowCanvas.width = mapCanvas.width = window.innerWidth;
+const height = cowCanvas.height = mapCanvas.height = window.innerHeight;
 
 const cowCtx = cowCanvas.getContext('2d'); 
 const mapCtx = mapCanvas.getContext('2d'); 
-const entityCtx = entityCanvas.getContext('2d');
 
 //load cow sprite sheet
 let img = document.getElementById("cowsprites");
@@ -312,24 +306,21 @@ class cow {
     this.ticks = 0;
     this.causeOfDeath = null;
 
-
     //state
-    //this.facing = "north"; //default facing value ( probably  need not exist outside
-                           //of draw's move condition.
-    this.previousTile = null;  //what tile the cow is heading to
+    this.stateTicks = 0; //how many ticks are left in this state
+    this.state = "idle";
 
-    this.stateTicks = 0; //what point we are in the current state
-                         //cycles between 0 to this.stateCap
-    
-    this.stateCap   = 0; //how many ticks the current state will last
+    this.facing = "north";  
 
-    this.state = "idle"; //the current state
-
-    this.animTicks = 0; //what phase of animation we are in
-    this.animCap = 4;   //how many frames the animation has
+    this.anim = "idle";
+    this.animTicks = 0;
+    this.animCap = 4;
 
 	  this.path = new Path2D();
 	  this.path.arc(this.tile.cp.x,this.tile.cp.y,this.size,0,2*Math.PI);
+  }
+
+  draw() {
   }
 
   //change the animation frame
@@ -368,145 +359,112 @@ class cow {
     let scaleX = 1;
     let scaleY = 1;
 
+    //border containing sprite
+    this.ctx.strokeRect(centeredx,centeredy,sprWidth,sprHeight);
+
     let flip = false;
 
-    let stateText = "oops something is wrong";
-
     if (this.state == "move") {
-
-       stateText = "kyyyYAaa";
-      //move centeredx and centerdy such that the correspond to a point
-      //on the line between where we are moving. The line is discretized
-      //by anim ticks with a length of (stateTicks * animCap)
-      let moveVector = this.tile.cp.sub(this.previousTile.cp);
-      //let moveVector = this.previousTile.cp.sub(this.tile.cp);
-      console.log(moveVector);
-
-      let totalTicks = this.stateCap * this.animCap;
-      let currentTick = (this.stateTicks * this.animCap) + this.animTicks;
-
-      dx = this.previousTile.cp.x + (currentTick/totalTicks)*moveVector.x - sprWidth/2;
-      dy = this.previousTile.cp.y + (currentTick/totalTicks)*moveVector.y - sprHeight/2;
-
-
-      // source and destination debug visual
-      /*
-      this.ctx.fillStyle ="green";
-      this.ctx.fillRect(this.tile.cp.x,this.tile.cp.y,20,20);
-
-      this.ctx.fillStyle ="red";
-      this.ctx.fillRect(this.previousTile.cp.x,this.previousTile.cp.y,20,20);
-      */
-
-      //calculate the cardinal direction i am facing
-      //let dirVec = new point(moves[dir].cp.x - this.tile.cp.x ,moves[dir].cp.y - this.tile.cp.y)
       
-      let dirVec = new point(this.tile.cp.x - this.previousTile.cp.x ,this.tile.cp.y - this.previousTile.cp.y)
-      //let dirVec = new point(this.previousTile.cp.x - this.tile.cp.x ,this.previousTile.cp.y - this.tile.cp.y)
-      let facing = null;
-    
-      let angleDirs = [];
-      /* This was a headache, I forgot that North in computer graphics is negative y , not positive 
-       * I kept encountering a situation where change dest - orgin made two lines correct , but the other
-       * was inverted , the true dir is from the new to the old , and swapping it inverted the north and south
-       * thus fixing it slightly, very confusing */
-      angleDirs.push({ dir: "north" , dist : vecAngle(dirVec,new point(0,-1)) } ); //north
-      angleDirs.push({ dir: "east" , dist : vecAngle(dirVec,new point(1,0)) } ); //east
-      angleDirs.push({ dir: "south" , dist : vecAngle(dirVec,new point(0,1)) } ); //south
-      angleDirs.push({ dir: "west" , dist : vecAngle(dirVec,new point(-1,0)) } ); //west
+      //params for drawing a line indicating movement
+      let lx = 0;
+      let ly = 0;
+      let ll = 40;
 
-      let closest = 0;
-      for ( let i = 0; i < angleDirs.length; i++ ) {
-        if (angleDirs[i].dist < angleDirs[closest].dist) {
-          closest = i;
-        }
-      }
-      facing = angleDirs[closest].dir;
-      if (facing == "east" || facing == "west" ) {
-        console.log("facing is " , facing);
-        console.log(angleDirs);
-        console.log(angleDirs[closest]);
-      }
+      sx = (this.animTicks % 4)*sprWidth;
 
-      //determine direction and adjust sprite indices accordingly
-      //at the same time find parameters that will illustrate
-      //the direction moved confined to N E S W
+      if ( this.facing == "north" ) {
+        lx = this.tile.cp.x;
+        ly = this.tile.cp.y - ll;
 
-      sx = (this.animTicks % this.animCap)*sprWidth;
-
-      if ( facing == "north" ) {
         sy = sprHeight * 2;
-      } else if ( facing == "east" ) {
+      } else if ( this.facing == "east" ) {
+        lx = this.tile.cp.x + ll;
+        ly = this.tile.cp.y;
+
         sy = sprHeight * 1;
-      } else if ( facing == "south") {
+      } else if ( this.facing == "south") {
+        lx = this.tile.cp.x;
+        ly = this.tile.cp.y + ll;
+
         sy = sprHeight * 0;
       } else {
+        lx = this.tile.cp.x - ll;
+        ly = this.tile.cp.y;
+
         sy = sprHeight * 1;
         scaleX = -1;
-        //adjust dx for flipped scale
-        dx = -dx - sprWidth;
+        dx = -centeredx - sprWidth;
       }
 
+      //draw a line indicating direction
+      //find the correct animation indices 
+      //for each direction 
 
-      //draw another line indicating true direction not pigeonholed into cardinal directioins
-      //draw the dir vector starting at the previous tile
       this.ctx.save();
-      this.ctx.strokeStyle = "pink";
-      this.ctx.lineWidth = 5;
+      this.ctx.strokeStyle = "red";
+      this.ctx.lineWidth = 3;
       this.ctx.beginPath();
-      this.ctx.moveTo(this.previousTile.cp.x,this.previousTile.cp.y);
-      this.ctx.lineTo(this.previousTile + dirVec.x,this.previousTile + dirVec.y);
-      //this.ctx.lineTo(this.tile.cp.x,this.tile.cp.y);
+      this.ctx.moveTo(this.tile.cp.x,this.tile.cp.y);
+      this.ctx.lineTo(lx,ly);
       this.ctx.closePath();
       this.ctx.stroke();
       this.ctx.restore();
 
+      //dispatch a visual indicator of event
+      this.ctx.fillStyle = "red";
+      this.ctx.font = '12px monospace';
+      this.ctx.fillText("Kyyaa" , this.tile.cp.x - this.size, this.tile.cp.y - this.size*4);
+
+
 
     } else if (this.state == "idle") {
       // 3 x [ 0 1 ]
-      sx = (this.animTicks % this.animCap) * sprWidth;
+      sx = (this.animTicks % 2) * sprWidth;
       sy = 3 * sprHeight;
 
-      stateText = "MoooOOooo";
+      //dispatch a visual indicator of event
+      this.ctx.fillStyle = "red";
+      this.ctx.font = '12px monospace';
+      this.ctx.fillText("Mooooo" , this.tile.cp.x - this.size, this.tile.cp.y - this.size*4);
 
     } else if (this.state == "eat") {
       // 4 x [ 0 1 ]
-      sx = (this.animTicks % this.animCap) * sprWidth;
+      sx = (this.animTicks % 2) * sprWidth;
       sy = 4 * sprHeight;
 
-      stateText = "munch munch";
+      //dispatch a visual indicator of event
+      this.ctx.fillStyle = "red";
+      this.ctx.font = '12px monospace';
+      this.ctx.fillText("munch" , this.tile.cp.x - this.size, this.tile.cp.y - this.size*4);
 
     } else if (this.state == "rest") {
       // 4 x [ 2 3 ]
-      sx = ( (this.animTicks % this.animCap) + 2)*sprWidth;
+      sx = ((this.animTicks % 2) + 2)*sprWidth;
       sy = 4 * sprHeight;
 
-      stateText = "zzZzzZzzZ";
+      //dispatch a visual indicator of event
+      this.ctx.fillStyle = "red";
+      this.ctx.font = '12px monospace';
+      this.ctx.fillText("zzZzzZZ" , this.tile.cp.x - this.size, this.tile.cp.y - this.size*4);
+
 
     } else if (this.state == "drink") {
       // 4 x [ 2 3 ]
-      sx = ((this.animTicks % this.animCap) + 2) * sprWidth;
+      sx = ((this.animTicks % 2) + 2) * sprWidth;
       sy = 4 * sprHeight;
 
+      //dispatch a visual indicator of event
       this.ctx.fillStyle = "red";
       this.ctx.font = '12px monospace';
-      stateText = "sLuuuuRp";
+      this.ctx.fillText("slurp" , this.tile.cp.x - this.size, this.tile.cp.y - this.size*4);
+
     }
 
     //draw sprites with calculated indices
     this.ctx.save();
     this.ctx.scale(scaleX,scaleY);
     this.ctx.drawImage(cowsprites,sx,sy,sprWidth,sprHeight,dx,dy,sprWidth,sprHeight);
-    /*
-    //apply a hue of this cow's color to the drawn image
-    //works but also hues the white pixels which we want to ignore
-    //can i only apply hue to pixels with non-zero alpha value?
-    this.ctx.globalCompositeOperation = "hue";
-    this.ctx.fillStyle = this.color;
-    this.ctx.fillRect(dx,dy,sprWidth,sprHeight);
-    this.ctx.globalCompositionOperation = "source-over";
-    this.ctx.restore();
-    */
     this.ctx.restore();
 
     //update animation state
@@ -514,7 +472,6 @@ class cow {
 
 
     //info bars
-    /*
     this.ctx.fillStyle = "green";
     this.ctx.fillRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*2.25,(this.energy/this.energyCap)*this.size*2,5);
     this.ctx.strokeRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*2.25,this.size*2,5);
@@ -531,33 +488,6 @@ class cow {
     this.ctx.font = '20px monospace';
     this.ctx.fillText(this.name , this.tile.cp.x - this.size, this.tile.cp.y - this.size*3.25);
     this.ctx.restore();
-    */
-
-    this.ctx.fillStyle = "green";
-    this.ctx.fillRect(dx,dy,(this.energy/this.energyCap)*this.size*2,5);
-    this.ctx.strokeRect(dx,dy,this.size*2,5);
-
-    this.ctx.fillStyle = "orange";
-    this.ctx.fillRect(dx,dy - this.size*.25,(this.hunger/this.hungerCap)*this.size*2,5);
-    this.ctx.strokeRect(dx,dy - this.size*.25,this.size*2,5);
-
-    this.ctx.fillStyle = "yellow";
-    this.ctx.fillRect(dx, dy - this.size*.5,(this.emotion/this.emotionCap)*this.size*2,5);
-    this.ctx.strokeRect(dx, dy - this.size*.5,this.size*2,5);
-
-    this.ctx.fillStyle = "blue";
-    this.ctx.fillRect(dx,dy - this.size*.75,(this.hydration/this.hydrationCap)*this.size*2,5);
-    this.ctx.strokeRect(dx,dy - this.size*.75,this.size*2,5);
-
-    this.ctx.fillStyle = "black";
-    this.ctx.font = '20px monospace';
-    this.ctx.fillText(this.name , this.tile.cp.x - this.size, this.tile.cp.y - this.size*3.25);
-
-
-    //display animation state description
-    this.ctx.fillStyle = "red";
-    this.ctx.font = '12px monospace';
-    this.ctx.fillText(stateText,dx,dy - this.size);
   }
 
   //consider th state and the environmnet, what action will I take
@@ -681,10 +611,30 @@ class cow {
       });
 
       let dir = Math.floor( Math.random() * moves.length);
-      //store mmy current tile
-      this.previousTile = this.tile;
       //let tile know I left
       this.tile.occupant = null;
+
+      //update facing based on old tile and previous
+      //find which direction up down left right , has the smallest angle with the vector
+      //generated between the old and previous tile
+      //let dirVec = new point(moves[dir].cp.x - this.tile.cp.x ,moves[dir].cp.y - this.tile.cp.y)
+
+      let dirVec = new point(this.tile.cp.x - moves[dir].cp.x ,this.tile.cp.y - moves[dir].cp.y)
+
+    
+      let angleDirs = [];
+      angleDirs.push({ dir: "north" , dist : vecAngle(dirVec,new point(0,1)) } ); //north
+      angleDirs.push({ dir: "east" , dist : vecAngle(dirVec,new point(1,0)) } ); //north
+      angleDirs.push({ dir: "south" , dist : vecAngle(dirVec,new point(0,-1)) } ); //north
+      angleDirs.push({ dir: "west" , dist : vecAngle(dirVec,new point(-1,0)) } ); //north
+      let closest = 0;
+      for ( let i = 0; i < angleDirs.length; i++ ) {
+        if (angleDirs[i].dist < angleDirs[closest].dist) {
+          closest = i;
+        }
+      }
+      this.facing = angleDirs[closest].dir;
+      
 
       //remind myself where I am
       this.tile = moves[dir];
@@ -708,11 +658,7 @@ class cow {
 
       //state housekeeping
       this.state = "move";
-      this.stateTicks = 0;
-      this.stateCap = 4;
-      //anim housekeeping
-      this.animTicks = 0;
-      this.animCap = 4;
+      this.stateTicks = 2;
 
   }
 
@@ -731,11 +677,7 @@ class cow {
 
       //state housekeeping
       this.state = "rest";
-      this.stateTicks = 0;
-      this.stateCap = 8;
-      //anim housekeeping
-      this.animTicks = 0;
-      this.animCap = 2;
+      this.stateTicks = 8;
 
     }
   }
@@ -759,13 +701,8 @@ class cow {
       //audit
       this.hungerRestored += meal;
 
-      //state housekeeping
       this.state = "eat";
-      this.stateTicks = 0;
-      this.stateCap = 4;
-      //anim housekeeping
-      this.animTicks = 0;
-      this.animCap = 2;
+      this.stateTicks = 4;
 
     }
 
@@ -774,14 +711,8 @@ class cow {
   }
 
   idle() {
-
-    //state housekeeping
     this.state = "idle";
-    this.stateTicks = 0;
-    this.stateCap = 2;
-    //anim housekeeping
-    this.animTicks = 0;
-    this.animCap = 2;
+    this.stateTicks = 2;
   }
 
 
@@ -798,13 +729,8 @@ class cow {
       //audit
       this.hydrationRestored += sip;
 
-      //state housekeeping
       this.state = "drink";
-      this.stateTicks = 0;
-      this.stateCap = 2;
-      //anim housekeeping
-      this.animTicks = 0;
-      this.animCap = 2;
+      this.stateTicks = 2;
 
     }
   }
@@ -817,12 +743,12 @@ class cow {
     }
 
     this.ticks++;
-    if (this.stateTicks != this.stateCap) {
-      this.stateTicks++;
+    if (this.stateTicks != 0) {
+      this.stateTicks--;
     } 
 
     //only change state of current state is finished
-    if (this.stateTicks == this.stateCap) {
+    if (this.stateTicks == 0) {
 
       let action = this.imperative();
       //console.log(this.name + " " + action);
@@ -832,6 +758,7 @@ class cow {
       } else if ( action == "rest" ) {
         this.rest();
         this.actionLog.push("rest");
+        console.log("someone is resting");
       } else if ( action == "move" ) {
         this.move();
         this.actionLog.push("move");
@@ -900,6 +827,8 @@ class cow {
       console.log("Cause of Death : " + this.causeOfDeath);
     }
 
+    //requst drawing
+    this.draw();
   }
 
 
@@ -1057,8 +986,7 @@ let fill = function(frontier,closed,width,height,x,y,debug=0) {
 //Construct a world boundary and fill it with tiles.
 //first tile placement
 let cp = new point(100,100);
-//720 x 2  //Math.PI/2
-let tt = new Tile(cp,6,720,Math.PI/2,null);
+let tt = new Tile(cp,6,720*2,Math.PI/2,null);
 
 //tiling
 
@@ -1129,9 +1057,8 @@ const names = [ "spark" , "cherry" , "plop", "ting" , "rocky", "spuck",
 
 let cows = [];
 let graveyard = [];
-let count = 50;
+let count = 10;
 for ( let i = 0; i < count; i++ ) {
-  //todo apply a hue over the sprite so cows can have unique colors
   let r = Math.random()*100 + 155;
   let g = Math.random()*100 + 155;
   let b = Math.random()*100 + 155;
@@ -1148,14 +1075,6 @@ for ( let i = 0; i < count; i++ ) {
   }
 }
 console.log(cows);
-
-
-///////////////////////////////
-// External Simulation Control
-///////////////////////////////
-
-//set an inspected cow for the entity pane
-let inspectedCow = cows[0];
 
 let tilesUpdate = function () {
   closed.forEach( c => {
@@ -1196,21 +1115,6 @@ let cowAnimation = function() {
   cows.forEach( c => {
     c.animate();
   });
-  entityUpdate();
-}
-
-let entityUpdate = function() {
-  let Icp = inspectedCow.tile.cp;
-  //draw a 200 by 200 box , scaled to 400 400 with tile.cp at center
-  let birdX = Icp.x - 200;
-  let birdY = Icp.y - 200;
-  let scale = 1.5;
-  entityCtx.imageSmoothingQuality = "high"; /* makes huge difference here */
-
-  entityCtx.clearRect(0,0,400*scale,400*scale);
-  entityCtx.drawImage(mapCanvas,birdX,birdY,400,400,0,0,400*scale,400*scale);
-  entityCtx.drawImage(cowCanvas,birdX,birdY,400,400,0,0,400*scale,400*scale);
-  //entityCtx.fillRect(0,0,800,800);
 }
 
 
@@ -1225,7 +1129,7 @@ let updateCall = function() {
   mapCtx.clearRect(0,0,1920,1080);
   tilesUpdate();
 
-  let frames = 10;
+  let frames = 5;
   for ( let i = 0; i < frames; i++) {
     setTimeout(cowAnimation,(tick/frames)*i);
   }

@@ -21,7 +21,7 @@ body {
 
   /* If the child is larger than the parent, overflow scroll allows to view all
    * contents */
-  overflow: scroll;
+  /*overflow: scroll;*/
   /*
   border-style: solid;
   border-width: 2px;
@@ -107,7 +107,9 @@ canvas {
   width: 60%;
   height: 100%;
   float: right;
+  /*
   overflow: scroll;
+  */
 }
 
 #entityStatPane {
@@ -115,12 +117,16 @@ canvas {
   height: 100%;
   width: 40%;
   float: left;
+  /*
   overflow: scroll;
+  */
 }
 #entityGenePane {
   background-color: green;
   height: 100%;
   width: 100%;
+  /*
   overflow: scroll;
+  */
 }
 

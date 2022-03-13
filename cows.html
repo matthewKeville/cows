@@ -1,23 +1,56 @@
 <html>
+  <body>
+    <div id="leftPane">
+      <canvas id="mapCanvas" style="z-index: 1;">
+      </canvas>
+      <canvas id="cowCanvas" style="z-index: 5;">
+      </canvas>
+      <img id='cowsprites' src="stardewcow.png" style="display:none">
+    </div>
 
-<div id="leftPane">
-  <canvas id="mapCanvas" style="z-index: 1;">
-  </canvas>
-  <canvas id="cowCanvas" style="z-index: 5;">
-  </canvas>
-  <img id='cowsprites' src="stardewcow.png" style="display:none">
-</div>
+    <div id="rightPane">
 
-<div id="rightPane">
-  <div id="entityPane">
-    this is where the entity pane is
-    <canvas id="entityCanvas" style="z-index 5">
-    </canvas>
-  </div>
+      <!-- Holds information regarding the inspected cow -->
 
-  <div id="controlPane">
-  </div>
-</div>
+      <div id="entityPane">
+      
+        <!-- Top portion of entity Pane -->
+
+        <div id="entityPaneTop">
+
+            <!-- Holds Bird's eye view of inspected cow   -->
+
+            <div id="entityBirdEyePane">
+              <canvas id="entityBirdEyeCanvas" style="z-index 5">
+              </canvas>
+            </div>
+
+            <!-- Holds the summary statistics of the inspected cow -->
+
+            <div id="entityStatPane">
+              <canvas id="entityStatCanvas" style="z-index 5">
+              </canvas>
+            </div>
+        </div>
+
+
+        <!-- Bottom portion of entity Pane -->
+
+        <div id="entityPaneBot">
+            <!-- Holds the genetic display of the inspected cow -->
+            <div id="entityGenePane">
+              <canvas id="entityGeneCanvas" style="z-index 5">
+              </canvas>
+            </div>
+         </div>
+      </div>
+
+      <!-- Holds simulation controls -->
+      <div id="controlPane">
+      </div>
+
+    </div>
+  </body>
 
 
 
@@ -33,11 +66,12 @@
 </style>
 <!------------------------>
 
+<!-- CSS -->
+<link rel="stylesheet" href="cows.css">
+
 <!-- JS  -->
 <script type="text/javascript" src="cows.js"></script>
 
-<!-- CSS -->
-<link rel="stylesheet" href="cows.css">
 
 
 

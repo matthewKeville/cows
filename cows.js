@@ -1,22 +1,158 @@
-//Set Canvas and Viewport dimensions
+// TODO
+// world building takes place before resizing has finished, i.e.
+// the code runs through everything , then when the dom is done loading
+// it will resize, so any calculations based on canvas need to be done after
+// resize. I need to figure out how to construct my classes and loops such that 
+// dom hook and resizing happen first
+
+//Hook into the DOM
+const AspectRatio = { x : 16 , y : 9 };
+
+const leftPane = document.querySelector('#leftPane');
+const rightPane = document.querySelector('#rightPane');
+const entityBirdEyePane = document.querySelector('#entityBirdEyePane');
+const entityStatPane = document.querySelector('#entityStatPane');
+const entityGenePane = document.querySelector('#entityGenePane');
+
 const cowCanvas = document.querySelector('#cowCanvas');
 const mapCanvas = document.querySelector('#mapCanvas');
-const entityCanvas = document.querySelector('#entityCanvas');
-//const width = cowCanvas.width = mapCanvas.width = window.innerWidth;
-//const height = cowCanvas.height = mapCanvas.height = window.innerHeight;
-const width = cowCanvas.width = mapCanvas.width = window.innerWidth*.67;
-const height = cowCanvas.height = mapCanvas.height = window.innerHeight*.9;
-const entityWidth = entityCanvas.width = window.innerWidth*.30;
-const entityHieght = entityCanvas.height = window.innerHeight*.70;
+const entityBirdEyeCanvas = document.querySelector('#entityBirdEyeCanvas');
+const entityStatCanvas = document.querySelector('#entityStatCanvas');
+const entityGeneCanvas = document.querySelector('#entityGeneCanvas');
 
 const cowCtx = cowCanvas.getContext('2d'); 
 const mapCtx = mapCanvas.getContext('2d'); 
-const entityCtx = entityCanvas.getContext('2d');
+const entityBirdEyeCtx = entityBirdEyeCanvas.getContext('2d');
+const entityStatCtx = entityStatCanvas.getContext('2d');
+const entityGeneCtx = entityGeneCanvas.getContext('2d');
 
-//load cow sprite sheet
+
 let img = document.getElementById("cowsprites");
 
-const tick = 500; //simulation time step in ms
+const tick = 100;     //simulation time step in ms
+const animFrames = 4; //animation frames render between updates
+
+//Map of Canvases used
+let cans = [   { name: 'map' , can : mapCanvas },
+               { name: 'cow' , can : cowCanvas },
+               { name: 'bird' , can : entityBirdEyeCanvas },
+               { name: 'stat' , can : entityStatCanvas },
+               { name: 'gene' , can : entityGeneCanvas }
+           ]
+
+/* Resize each canvas to adhere to the Aspect Ratio */
+let adjustGraphics = function() {
+  console.log("Resizing Canvas for client");
+
+  console.log("Initial canvases");
+  cans.forEach ( c => {
+    console.log("canvas : " + c.name  + " width : "  + c.can.width + " height :" + c.can.height);
+  });
+
+  //todo canvas resize can be put in a loop, no need to explicitly 
+  //define each in this manner
+
+  //resize the canvas to values that fit the aspect ratio
+  //will being less than the the leftPane 
+  
+  let nearestRes = { x : AspectRatio.x , y : AspectRatio.y };
+  let maxed = false;
+  while ( nearestRes.x < leftPane.offsetWidth && nearestRes.y < leftPane.offsetHeight ) {
+    nearestRes.x += AspectRatio.x;
+    nearestRes.y += AspectRatio.y;
+  }
+  nearestRes.x -= AspectRatio.x;
+  nearestRes.y -= AspectRatio.y;
+
+  console.log("nearest res");
+  console.log(nearestRes);
+  console.log("aspect ratio");
+  console.log(AspectRatio);
+
+  const cowWidth = cowCanvas.width   = mapCanvas.width    = nearestRes.x;
+  const cowHeight = cowCanvas.height = mapCanvas.height   = nearestRes.y;
+  //adjust canvas style to have a 1:1 mapping to client to logical representation
+  cowCanvas.style.width = nearestRes.x;
+  cowCanvas.style.height = nearestRes.y;
+  mapCanvas.style.width = nearestRes.x;
+  mapCanvas.style.height = nearestRes.y;
+
+  console.log("Post cowCanvas.width");
+  console.log(cowCanvas.width);
+  console.log("Post leftPane.width");
+  console.log(leftPane.offsetWidth);
+
+  //nearest res for birdEye
+
+  nearestRes = { x : AspectRatio.x , y : AspectRatio.y };
+  maxed = false;
+  while ( nearestRes.x < entityBirdEyePane.offsetWidth && nearestRes.y < entityBirdEyePane.offsetHeight ) {
+    nearestRes.x += AspectRatio.x;
+    nearestRes.y += AspectRatio.y;
+  }
+  nearestRes.x -= AspectRatio.x;
+  nearestRes.y -= AspectRatio.y;
+
+
+  const entityBirdEyeWidth  = entityBirdEyeCanvas.width   = nearestRes.x;
+  const entityBirdEyeHieght = entityBirdEyeCanvas.height  = nearestRes.y;
+  //adjust canvas style to have a 1:1 mapping to client to logical representation
+  entityBirdEyeCanvas.style.width = nearestRes.x;
+  entityBirdEyeCanvas.style.height = nearestRes.y;
+
+
+  //nearest res for entityStat
+
+  nearestRes = { x : AspectRatio.x , y : AspectRatio.y };
+  maxed = false;
+  while ( nearestRes.x < entityStatPane.offsetWidth && nearestRes.y < entityStatPane.offsetHeight ) {
+    nearestRes.x += AspectRatio.x;
+    nearestRes.y += AspectRatio.y;
+  }
+  nearestRes.x -= AspectRatio.x;
+  nearestRes.y -= AspectRatio.y;
+
+  const entityStatWidth  = entityStatCanvas.width   = nearestRes.x;
+  const entityStatHieght = entityStatCanvas.height  =  nearestRes.y;
+  //adjust canvas style to have a 1:1 mapping to client to logical representation
+  entityStatCanvas.style.width = nearestRes.x;
+  entityStatCanvas.style.height = nearestRes.y;
+
+  //nearest res for entityGene
+
+  nearestRes = { x : AspectRatio.x , y : AspectRatio.y };
+  maxed = false;
+  while ( nearestRes.x < entityGenePane.offsetWidth && nearestRes.y < entityGenePane.offsetHeight ) {
+    nearestRes.x += AspectRatio.x;
+    nearestRes.y += AspectRatio.y;
+  }
+  nearestRes.x -= AspectRatio.x;
+  nearestRes.y -= AspectRatio.y;
+
+  const entityGeneWidth  = entityGeneCanvas.width     = nearestRes.x
+  const entityGeneHeight = entityGeneCanvas.height = nearestRes.y
+  //adjust canvas style to have a 1:1 mapping to client to logical representation
+  entityGeneCanvas.style.width = nearestRes.x;
+  entityGeneCanvas.style.height = nearestRes.y;
+
+  console.log("resized canvases");
+  cans.forEach ( c => {
+    console.log("canvas : " + c.name  + " width : "  + c.can.width + " height :" + c.can.height);
+  });
+
+  //construct the simulation
+  start();
+
+
+}
+
+document.addEventListener("DOMContentLoaded", adjustGraphics);
+
+
+/////////////////////////////////////
+// Class and function definitions  //
+/////////////////////////////////////
+
 
 ////////////////////
 //Utility
@@ -95,7 +231,6 @@ function vecAngle(p1v,p2v) {
 /////////////////////////
 // Map Generation
 // //////////////////////
-
 
 class Tile {
   constructor(cp,n,area,rotOff = 0,type) {
@@ -177,22 +312,28 @@ class Tile {
   }
 }
 
+
 //////////////////////////
 // Terrain              //
 //////////////////////////
 
-
-// Terrain Types
-
 //64 phases of growth
- const grain = [ '#884B11' , '#854C11' , '#834E11' , '#815011' , '#7F5211' , '#7D5412' , '#7B5612' , '#785712' ,
-                  '#765912' , '#745B13' , '#725D13' , '#705F13' , '#6E6113' , '#6B6213' , '#696414' , '#676614' ,
-                  '#656814' , '#636A14' , '#616C15' , '#5E6D15' , '#5C6F15' , '#5A7115' , '#587315' , '#567516' ,
-                  '#547716' , '#527916' , '#4F7A16' , '#4D7C17' , '#4B7E17' , '#498017' , '#478217' , '#458417' ,
-                  '#428518' , '#408718' , '#3E8918' , '#3C8B18' , '#3A8D19' , '#388F19' , '#359019' , '#339219' ,
-                  '#319419' , '#2F961A' , '#2D981A' , '#2B9A1A' , '#299C1A' , '#269D1B' , '#249F1B' , '#22A11B' , 
-                  '#20A31B' , '#1EA51B' , '#1CA71C' , '#19A81C' , '#17AA1C' , '#15AC1C' , '#13AE1D' , '#11B01D' , 
-                  '#0FB21D' , '#0CB31D' , '#0AB51D' , '#08B71E' , '#06B91E' , '#04BB1E' , '#02BD1E' , '#00BF1F'   ];
+ const grain = [ '#884B11' , '#854C11' , '#834E11' , '#815011' ,
+                 '#7F5211' , '#7D5412' , '#7B5612' , '#785712' ,
+                 '#765912' , '#745B13' , '#725D13' , '#705F13' ,
+                 '#6E6113' , '#6B6213' , '#696414' , '#676614' ,
+                 '#656814' , '#636A14' , '#616C15' , '#5E6D15' , 
+                 '#5C6F15' , '#5A7115' , '#587315' , '#567516' ,
+                 '#547716' , '#527916' , '#4F7A16' , '#4D7C17' ,
+                 '#4B7E17' , '#498017' , '#478217' , '#458417' ,
+                 '#428518' , '#408718' , '#3E8918' , '#3C8B18' , 
+                 '#3A8D19' , '#388F19' , '#359019' , '#339219' ,
+                 '#319419' , '#2F961A' , '#2D981A' , '#2B9A1A' , 
+                 '#299C1A' , '#269D1B' , '#249F1B' , '#22A11B' , 
+                 '#20A31B' , '#1EA51B' , '#1CA71C' , '#19A81C' , 
+                 '#17AA1C' , '#15AC1C' , '#13AE1D' , '#11B01D' , 
+                 '#0FB21D' , '#0CB31D' , '#0AB51D' , '#08B71E' ,
+                 '#06B91E' , '#04BB1E' , '#02BD1E' , '#00BF1F'   ];
 
 class Grass {
 
@@ -268,42 +409,65 @@ class Rock {
 ////////////////////////////
 //Inhabitants
 ////////////////////////////
-
+const energyBase = 100;
+const hungerBase = 100;
+const emotionBase = 100;
+const hydrationBase = 100;
 //Cows are doubly referenced between cow and tile
 class cow {
-  constructor(tile,env,size,color,name='roxxxane') {
+  constructor(tile,env,size,color,name,genes) {
+    // 1. size should be reworked/ repurposed
+    // 2. color currently has no affect
+
+    //graphics context
+    this.ctx = cowCtx;
+
+    ////////////////////////
+    //genetic attributes
+    ////////////////////////
+    //
+    this.genes = genes;
+
+    this.absorption      = this.genes.get('absorption');    //impact hydration cap
+    this.agility         = this.genes.get('agility');    //ease of traversal
+    this.desiribility    = this.genes.get('desiribility');    //likelihood of mating
+    this.endurance       = this.genes.get('endurance');    //impact energy cap
+    this.hermitic        = this.genes.get('hermitic');    //desire to avoid others
+    this.hostility       = this.genes.get('hostility');    //likelihood of attacking others
+    this.metabolicEff    = this.genes.get('metabolicEff');    //easge of digestion
+    this.mindfullness    = this.genes.get('mindfullness');    //impact emotion cap
+    this.nomadicity      = this.genes.get('nomadicity');   //desire to migrate
+    this.satiation       = this.genes.get('satiation');    //impact hunger cap
+    this.urgency         = this.genes.get('urgency');    //desire to mate
+
+    ///////////////////////////
+    //Model variables
+    ///////////////////////////
+
+    this.alive = true;
     this.tile = tile; //tile im located at all
     this.env  = env;  //list of all tiles in the universe
     this.size = size;
     this.color = color;
     this.name = name;
-    this.alive = true;
-    //this.ctx = cowCtx;
-    this.ctx = cowCtx;
 
-    //genetic attributes
-    this.energyCap = 100;  
-    this.hungerCap = 100;
-    this.emotionCap = 100;
-    this.hydrationCap = 100;
+    this.energyCap = energyBase * this.endurance;  
+    this.hungerCap = hungerBase * this.satiation;
+    this.emotionCap = emotionBase * this.mindfullness;
+    this.hydrationCap = hydrationBase * this.absorption;
 
-    this.metabolicEff = 1; //easge of digestion
-    this.endurance    = 1; //ease of traversal
-    this.desiribility = 1; //likelihood of mating
-    this.nomadicity   = .5; //desire to migrate
-    this.hermitic     = 1; //desire to avoid others
-    this.urgency      = 1; //desire to mate
-    this.hostility    = 1; //likelihood of attacking others
-
-    //model variables
-    this.energy = 100; //physical health
-    this.hunger = 100; //energy in the body
-    this.emotion = 100; //social satisfaction 
+    this.energy = this.energyCap; //physical health
+    this.hunger = this.hungerCap; //energy in the body
+    this.emotion = this.emotionCap; //social satisfaction 
     // on social : nomads lose emotion when stuck in the same place
     //           : hermits lose emotion when stuck with others
-    this.hydration = 100;
+    this.hydration = this.hydrationCap;
 
+
+    //////////////////////
     //audit
+    /////////////////////
+
     this.actionLog = [];
     this.energyRestored = 0;
     this.hungerRestored = 0;
@@ -327,24 +491,20 @@ class cow {
 
     this.animTicks = 0; //what phase of animation we are in
     this.animCap = 4;   //how many frames the animation has
+    this.framesPerUpdate = 4;
 
-	  this.path = new Path2D();
-	  this.path.arc(this.tile.cp.x,this.tile.cp.y,this.size,0,2*Math.PI);
+    this.boundingPath = null;
+
+    ////////////////////////////
+    //debug properties
+    ////////////////////////////
+    this.debug = false;
   }
 
   //change the animation frame
   //and draw to the canvas
   animate() {
     //console.log("cow animation + " + this.animTicks);
-    //body
-    /*
-    this.ctx.save();
-    this.ctx.fillStyle=this.color;
-    this.ctx.fill(this.path);
-    this.ctx.restore();
-    this.ctx.save();
-    */
-
 
     let sprWidth  = 128/4;
     let sprHeight = 160/5;
@@ -353,6 +513,8 @@ class cow {
     //our tiles center point
     let centeredx = this.tile.cp.x - sprWidth/2;
     let centeredy = this.tile.cp.y - sprHeight/2;
+
+
     
     //source origin
     let sx = 0;
@@ -372,6 +534,41 @@ class cow {
 
     let stateText = "oops something is wrong";
 
+    ///////////////////////////////
+    // Calculate animation state
+    ///////////////////////////////
+
+    let totalTicks = this.stateCap * animFrames;
+    //if the animation loop requests less frames than
+    //the entire animation requires, we sub sample the frames
+    //and adjust our total ticks to account for this when we 
+    //traverse the line between the source and target
+    if (animFrames < this.animCap) {
+      totalTicks = this.stateCap * animFrames;
+    }
+
+    let currentTick = (this.stateTicks * animFrames) + this.animTicks;
+    /*
+    let currentTick = (this.stateTicks * this.animCap) + this.animTicks;
+    if (animFrames < this.animCap) {
+      currentTick = (this.stateTicks * animFrames) + this.animTicks;
+    }
+    */
+
+    if (this.debug) {
+      console.log("stateTick : ", this.stateTicks);
+      console.log("stateCap : ", this.stateCap);
+      console.log("animTick : ", this.animTicks);
+      console.log("animTick % animCap : " , this.animTicks % this.animCap);
+      console.log("animCap : ", this.animCap);
+      console.log("animFrames : ", animFrames);
+      console.log("current tick : " , currentTick);
+      console.log("total ticks : " , totalTicks);
+      console.warn("----------------------------");
+    }
+
+
+
     if (this.state == "move") {
 
        stateText = "kyyyYAaa";
@@ -380,10 +577,7 @@ class cow {
       //by anim ticks with a length of (stateTicks * animCap)
       let moveVector = this.tile.cp.sub(this.previousTile.cp);
       //let moveVector = this.previousTile.cp.sub(this.tile.cp);
-      console.log(moveVector);
 
-      let totalTicks = this.stateCap * this.animCap;
-      let currentTick = (this.stateTicks * this.animCap) + this.animTicks;
 
       dx = this.previousTile.cp.x + (currentTick/totalTicks)*moveVector.x - sprWidth/2;
       dy = this.previousTile.cp.y + (currentTick/totalTicks)*moveVector.y - sprHeight/2;
@@ -422,11 +616,6 @@ class cow {
         }
       }
       facing = angleDirs[closest].dir;
-      if (facing == "east" || facing == "west" ) {
-        console.log("facing is " , facing);
-        console.log(angleDirs);
-        console.log(angleDirs[closest]);
-      }
 
       //determine direction and adjust sprite indices accordingly
       //at the same time find parameters that will illustrate
@@ -497,6 +686,18 @@ class cow {
     this.ctx.save();
     this.ctx.scale(scaleX,scaleY);
     this.ctx.drawImage(cowsprites,sx,sy,sprWidth,sprHeight,dx,dy,sprWidth,sprHeight);
+
+
+    //update the bounding path of the cow
+    this.boundingPath = new Path2D();
+    this.boundingPath.arc(dx+sprWidth/2,dy+sprHeight/2,this.size,0,2*Math.PI); 
+    this.ctx.stroke(this.boundingPath);
+
+
+    /*
+    this.ctx.fillRect(dx,dy,20,20);
+    */
+
     /*
     //apply a hue of this cow's color to the drawn image
     //works but also hues the white pixels which we want to ignore
@@ -509,30 +710,8 @@ class cow {
     */
     this.ctx.restore();
 
-    //update animation state
-    this.animTicks = (this.animTicks + 1) % this.animCap;
-
 
     //info bars
-    /*
-    this.ctx.fillStyle = "green";
-    this.ctx.fillRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*2.25,(this.energy/this.energyCap)*this.size*2,5);
-    this.ctx.strokeRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*2.25,this.size*2,5);
-    this.ctx.fillStyle = "orange";
-    this.ctx.fillRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*2.5,(this.hunger/this.hungerCap)*this.size*2,5);
-    this.ctx.strokeRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*2.5,this.size*2,5);
-    this.ctx.fillStyle = "yellow";
-    this.ctx.fillRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*2.75,(this.emotion/this.emotionCap)*this.size*2,5);
-    this.ctx.strokeRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*2.75,this.size*2,5);
-    this.ctx.fillStyle = "blue";
-    this.ctx.fillRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*3,(this.hydration/this.hydrationCap)*this.size*2,5);
-    this.ctx.strokeRect(this.tile.cp.x - this.size, this.tile.cp.y - this.size*3,this.size*2,5);
-    this.ctx.fillStyle = "black";
-    this.ctx.font = '20px monospace';
-    this.ctx.fillText(this.name , this.tile.cp.x - this.size, this.tile.cp.y - this.size*3.25);
-    this.ctx.restore();
-    */
-
     this.ctx.fillStyle = "green";
     this.ctx.fillRect(dx,dy,(this.energy/this.energyCap)*this.size*2,5);
     this.ctx.strokeRect(dx,dy,this.size*2,5);
@@ -549,15 +728,29 @@ class cow {
     this.ctx.fillRect(dx,dy - this.size*.75,(this.hydration/this.hydrationCap)*this.size*2,5);
     this.ctx.strokeRect(dx,dy - this.size*.75,this.size*2,5);
 
+    //name bar
     this.ctx.fillStyle = "black";
     this.ctx.font = '20px monospace';
-    this.ctx.fillText(this.name , this.tile.cp.x - this.size, this.tile.cp.y - this.size*3.25);
+    this.ctx.fillText(this.name ,dx,dy - this.size*1.5);
 
-
-    //display animation state description
+    //animation bar
     this.ctx.fillStyle = "red";
     this.ctx.font = '12px monospace';
     this.ctx.fillText(stateText,dx,dy - this.size);
+
+
+    //update animation state
+    //if animCap < animFrames , we duplicate the animation
+    //if animCap > animFrames , we truncate the animation
+    this.animTicks = (this.animTicks + 1) % animFrames;
+
+    /*
+    this.animTicks = (this.animTicks + 1) % this.animCap;
+    if (animFrames < this.animCap) {
+      this.animTicks = (this.animTicks + 1) % animFrames;
+    }
+    */
+
   }
 
   //consider th state and the environmnet, what action will I take
@@ -692,14 +885,9 @@ class cow {
       //10 would be max travel cost 
       //and is discounted by traversability and cows endurance
       //cap endurant discount at .05, means that .95 -> 1 has no difference ...
-      this.energy -= this.tile.type.traversability*10*( Math.max((1-this.endurance),.05) );
+      this.energy -= this.tile.type.traversability*10*( Math.max((1-this.agility),.05) );
       //let tile now I'm here
       this.tile.occupant = this;
-
-      //update the rendering path for the cow
-      this.path = new Path2D();
-      this.path.arc(this.tile.cp.x,this.tile.cp.y,this.size,0,2*Math.PI);
-
 
 
       //update audit
@@ -888,7 +1076,9 @@ class cow {
 
     if (!this.alive) {
       this.tile.occupant = null;
+     
       console.log(this.name + " has passed ");
+      /*
       console.log("Actions");
       console.log(this.actionLog);
 
@@ -898,6 +1088,7 @@ class cow {
       console.log("Tiles Traveled : " + this.tilesTraveled);
       console.log("Ticks : " + this.ticks);
       console.log("Cause of Death : " + this.causeOfDeath);
+      */
     }
 
   }
@@ -1054,69 +1245,6 @@ let fill = function(frontier,closed,width,height,x,y,debug=0) {
 }
 
 
-//Construct a world boundary and fill it with tiles.
-//first tile placement
-let cp = new point(100,100);
-//720 x 2  //Math.PI/2
-let tt = new Tile(cp,6,720,Math.PI/2,null);
-
-//tiling
-
-let landScapeWidth = 800;
-let landScapeHeight = 600;
-
-//illustrate world boundary
-//mapCtx.strokeRect(cp.x,cp.y,landScapeWidth,landScapeHeight)
-
-//fill out boundary with tiles
-let frontier = [];
-let closed = [];
-frontier.push(tt);
-[frontier,closed] = fill(frontier,closed,landScapeWidth,landScapeHeight,cp.x,cp.y);
-console.log(closed);
-
-///////////////////////////////
-// Apply Terrain to the tiles
-///////////////////////////////
-
-closed.forEach( t => {
-  let tv = .2; //traversability
-  let hl = Math.random()*30; //harvest level
-  let hr = (Math.random()*4)*(.01); //harvest rate
-  let hm = 100; //max harvest
-  let hd = .2; //hydration
-  let com = .4; //comfort
-  t.type = new Grass(tv,hl,hr,hm,hd,com);
-});
-
-//Apply random water tiles
-let wrate = .55
-closed.forEach( t => {
-  if (Math.random() < wrate) {
-    let tv = Math.random()*(.6) + .2; //traversability water can be .2 to .8
-    let hl = Math.random()*30; //harvest level
-    let hr = (Math.random()*4)*(.01); //harvest rate
-    let hm = 100; //max harvest
-    let hd = 1; //hydration
-    let com = 0; //comfort
-    t.type = new Water(tv,hl,hr,hm,hd,com);
-  }
-});
-
-let rrate = .4;
-closed.forEach( t => {
-  if (Math.random() < rrate) {
-    let tv = Math.random()*.3 + .2
-    let hl = 0; //harvest level
-    let hr = 0; //harvest rate
-    let hm = 0; //max harvest
-    let hd = 0; //hydration
-    let com = .8; //comfort
-    t.type = new Rock(tv,hl,hr,hm,hd,com);
-  }
-});
-
-
 //////////////////////
 // Cow instanatiation
 //////////////////////
@@ -1125,115 +1253,324 @@ const names = [ "spark" , "cherry" , "plop", "ting" , "rocky", "spuck",
                 "wop"   , "slop"   , "pog" , "glop" , "spur" , "whisp",
                 "tuna"  , "gorsh"  , "mil" , "tran" , "sorch", "bash" ,
                 "grass" , "rock" , "fire" , "light" , "wet"  , "twig" ,
-                "plain" , "valley" , "hill" , "beach" , "dry" , "mad" ];
+                "plain" , "valley" , "hill" , "beach" , "dry" , "mad" ,
+                "bertha", "bessie" , "bussy", "helen" , "karen", "sagar"];
 
-let cows = [];
-let graveyard = [];
-let count = 50;
-for ( let i = 0; i < count; i++ ) {
-  //todo apply a hue over the sprite so cows can have unique colors
-  let r = Math.random()*100 + 155;
-  let g = Math.random()*100 + 155;
-  let b = Math.random()*100 + 155;
-  let color = "rgb(" + r + "," + g + "," + b +")";
-  let name = names[Math.floor(Math.random()*names.length)];
-  let startFound = false;
-  while (!startFound) {
-    let tileIndex = Math.floor(Math.random()*closed.length);
-    let tile = closed[tileIndex];
-    if (tile.occupant == null) {
-      startFound = true;
-      cows.push( new cow(tile,closed,20,color,name));
-    }
-  }
+
+function makeCow(tile,env) {
+
+    let r = Math.random()*100 + 155;
+    let g = Math.random()*100 + 155;
+    let b = Math.random()*100 + 155;
+    let color = "rgb(" + r + "," + g + "," + b +")";
+    let name = names[Math.floor(Math.random()*names.length)];
+
+    let genes = new Map();
+    genes.set( 'absorption'      , Math.random()  );    //impact hydration cap
+    genes.set( 'agility'         , Math.random()  );    //ease of traversal
+    genes.set( 'desiribility'    , Math.random()  );    //likelihood of mating
+    genes.set( 'endurance'       , Math.random()  );    //impact energy cap
+    genes.set( 'hermitic'        , Math.random()  );    //desire to avoid others
+    genes.set( 'hostility'       , Math.random()  );    //likelihood of attacking others
+    genes.set( 'metabolicEff'    , Math.random()  );    //easge of digestion
+    genes.set( 'mindfullness'    , Math.random()  );    //impact emotion cap
+    genes.set( 'nomadicity'      , Math.random()  );    //desire to migrate
+    genes.set( 'satiation'       , Math.random()  );    //impact hunger cap
+    genes.set( 'urgency'         , Math.random()  );    //desire to mate
+    return new cow(tile,env,20,color,name,genes);
 }
-console.log(cows);
 
 
-///////////////////////////////
-// External Simulation Control
-///////////////////////////////
+////////////////////////////////////
+/// Construction Start            //
+////////////////////////////////////
 
-//set an inspected cow for the entity pane
-let inspectedCow = cows[0];
+let start = function() {
+  console.log("Building Simulation");
 
-let tilesUpdate = function () {
-  closed.forEach( c => {
-    c.update();
-    //c.renderPath();
+  // fill algorithm starting and bounding parameters needs a rework,
+  // need more clarity on what startx, starty and landScapeWidth and landScapeHeight do
+  // in reference to the start tile @ cp.x, cp.y
+
+
+  //Construct a world boundary and fill it with tiles.
+  //first tile placement
+  let cp = new point(0,0);
+  //720 x 2  //Math.PI/2
+  let tt = new Tile(cp,6,720*2,Math.PI/2,null);
+
+  //tiling
+
+  let landScapeWidth = cowCanvas.width;
+  let landScapeHeight = cowCanvas.height;
+
+  //illustrate world boundary
+  //mapCtx.strokeRect(cp.x,cp.y,landScapeWidth,landScapeHeight)
+
+  //fill out boundary with tiles
+  let frontier = [];
+  let closed = [];
+  frontier.push(tt);
+  [frontier,closed] = fill(frontier,closed,landScapeWidth,landScapeHeight,cp.x,cp.y);
+  console.log(closed);
+
+  ///////////////////////////////
+  // Apply Terrain to the tiles
+  ///////////////////////////////
+
+  closed.forEach( t => {
+    let tv = .2; //traversability
+    let hl = Math.random()*30; //harvest level
+    let hr = (Math.random()*4)*(.01); //harvest rate
+    let hm = 100; //max harvest
+    let hd = .2; //hydration
+    let com = .4; //comfort
+    t.type = new Grass(tv,hl,hr,hm,hd,com);
+  });
+
+  //Apply random water tiles
+  let wrate = .55
+  closed.forEach( t => {
+    if (Math.random() < wrate) {
+      let tv = Math.random()*(.6) + .2; //traversability water can be .2 to .8
+      let hl = Math.random()*30; //harvest level
+      let hr = (Math.random()*4)*(.01); //harvest rate
+      let hm = 100; //max harvest
+      let hd = 1; //hydration
+      let com = 0; //comfort
+      t.type = new Water(tv,hl,hr,hm,hd,com);
+    }
+  });
+
+  let rrate = .4;
+  closed.forEach( t => {
+    if (Math.random() < rrate) {
+      let tv = Math.random()*.3 + .2
+      let hl = 0; //harvest level
+      let hr = 0; //harvest rate
+      let hm = 0; //max harvest
+      let hd = 0; //hydration
+      let com = .8; //comfort
+      t.type = new Rock(tv,hl,hr,hm,hd,com);
+    }
+  });
+
+
+
+  let cows = [];
+  let graveyard = [];
+  let count = 100;
+  for ( let i = 0; i < count; i++ ) {
+    //todo apply a hue over the sprite so cows can have unique colors
     /*
-    if ( c.needsRedraw ) {
-      c.draw();
-    }
+    let r = Math.random()*100 + 155;
+    let g = Math.random()*100 + 155;
+    let b = Math.random()*100 + 155;
+    let color = "rgb(" + r + "," + g + "," + b +")";
+    let name = names[Math.floor(Math.random()*names.length)];
     */
-  });
-}
-
-let cowsUpdate = function () {
-  cows.forEach( c => {
-    c.update();
-    //c.draw();
-  });
-  //remove any dead cows
-  let dead = [];
-  for ( let i = 0; i < cows.length; i++) {
-    if (!cows[i].alive) {
-      dead.push(i);
-      graveyard.push(cows[i]);
+    let startFound = false;
+    while (!startFound) {
+      let tileIndex = Math.floor(Math.random()*closed.length);
+      let tile = closed[tileIndex];
+      if (tile.occupant == null) {
+        startFound = true;
+        cows.push(makeCow(tile,closed));
+      }
     }
   }
-  let removed = 0;
-  dead.forEach( d => {
-    cows.splice(d-removed,1);
-    removed++;
-  });
-}
+  console.log(cows);
+
+  //debug cow
+  //cows[0].debug=true;
 
 
+  ///////////////////////////////
+  // External Simulation Control
+  ///////////////////////////////
 
-let cowAnimation = function() {
-  cowCtx.clearRect(0,0,1920,1080);
-  cows.forEach( c => {
-    c.animate();
-  });
-  entityUpdate();
-}
+  //set an inspected cow for the entity pane
+  let inspectedCow = cows[0];
 
-let entityUpdate = function() {
-  let Icp = inspectedCow.tile.cp;
-  //draw a 200 by 200 box , scaled to 400 400 with tile.cp at center
-  let birdX = Icp.x - 200;
-  let birdY = Icp.y - 200;
-  let scale = 1.5;
-  entityCtx.imageSmoothingQuality = "high"; /* makes huge difference here */
-
-  entityCtx.clearRect(0,0,400*scale,400*scale);
-  entityCtx.drawImage(mapCanvas,birdX,birdY,400,400,0,0,400*scale,400*scale);
-  entityCtx.drawImage(cowCanvas,birdX,birdY,400,400,0,0,400*scale,400*scale);
-  //entityCtx.fillRect(0,0,800,800);
-}
-
-
-let updateCall = function() {
-  
-  //console.log("updating");
-  if ( cows.length == 0 ) {
-    clearInterval(id);
-    console.log(graveyard);
+  let tilesUpdate = function () {
+    closed.forEach( c => {
+      c.update();
+    });
   }
 
-  mapCtx.clearRect(0,0,1920,1080);
-  tilesUpdate();
-
-  let frames = 10;
-  for ( let i = 0; i < frames; i++) {
-    setTimeout(cowAnimation,(tick/frames)*i);
+  let cowsUpdate = function () {
+    console.warn("---------Cows update----------------");
+    cows.forEach( c => {
+      c.update();
+      //c.draw();
+    });
+    //remove any dead cows
+    let dead = [];
+    for ( let i = 0; i < cows.length; i++) {
+      if (!cows[i].alive) {
+        dead.push(i);
+        graveyard.push(cows[i]);
+      }
+    }
+    let removed = 0;
+    dead.forEach( d => {
+      cows.splice(d-removed,1);
+      removed++;
+    });
   }
-  cowsUpdate();
-}
 
-let id = setInterval(updateCall,tick);
 
+
+
+  let inspectedGeneUpdate = function() {
+
+    let geneMap = inspectedCow.genes;
+    // gene display will occupy same width as the bird's eye view
+    let barGapRatio = .4;   //ratio of space between bars and the space the bars occupy in x
+    let barW = entityGeneCanvas.width * (1-barGapRatio) / geneMap.size;
+    let barH = entityGeneCanvas.height * (3/4);
+    console.log(barGapRatio);
+    console.log(barW);
+    console.log(barH);
+    console.log(entityGeneCanvas.width);
+
+
+    let index = 0;
+    let colors = ['Aqua','Aquamarine','BlueViolet','Brown','Charteuse','Chocolate','Blue',
+                  'Crimson','Cyan','DarkOrange','DeepPink','DarkRed','Gold'];
+    geneMap.forEach((value,key) => {
+      //console.log(key, " : " , value);
+      entityGeneCtx.save();
+      entityGeneCtx.fillStyle = colors[index];
+      // + barW *2 is an approximate centering , this design needs rework
+      entityGeneCtx.lineWidth = 1;
+      entityGeneCtx.strokeRect( (((barGapRatio*barW) + barW) * index) + barW*2,
+                                entityGeneCanvas.height,barW,-barH);
+      entityGeneCtx.fillRect(   (((barGapRatio*barW) + barW) * index) + barW*2,
+                                entityGeneCanvas.height,barW,-barH*value);
+      entityGeneCtx.restore();
+      index++;
+    });
+  }
+
+  let inspectedBirdEyeUpdate = function() {
+
+    let Icp = inspectedCow.tile.cp;
+    //birdW and birdH should be a function of intended zoom
+    //we want to confine the space in the cow and map canvas to be strictly less
+    //than the space provided in the birdEye Canvas
+    /*
+    let birdW = 16*40;
+    let birdH = 9*40;
+    */
+    let zoom = 2;
+    let birdW = entityBirdEyeCanvas.width/zoom;
+    let birdH = entityBirdEyeCanvas.height/zoom;
+
+    //draw a 200 by 200 box , scaled to 400 400 with tile.cp at center
+    let birdX = Icp.x - birdW/2;
+    let birdY = Icp.y - birdH/2;
+    let scale = 1;
+    entityBirdEyeCtx.save();
+    entityBirdEyeCtx.imageSmoothingQuality = "high"; /* makes huge difference here */
+    entityBirdEyeCtx.clearRect(0,0,entityBirdEyeCanvas.width,entityBirdEyeCanvas.height);
+    //50 are padding on the canvas , this should be done by css ...
+    /*
+    entityBirdEyeCtx.drawImage(mapCanvas,birdX,birdY,birdW,birdH,hPad,vPad,birdW*scale,birdH*scale);
+    entityBirdEyeCtx.drawImage(cowCanvas,birdX,birdY,birdW,birdH,hPad,vPad,birdW*scale,birdH*scale);
+    */
+    entityBirdEyeCtx.drawImage(mapCanvas,birdX,birdY,birdW,birdH,0,0,entityBirdEyeCanvas.width,
+                                                                   entityBirdEyeCanvas.height);
+    entityBirdEyeCtx.drawImage(cowCanvas,birdX,birdY,birdW,birdH,0,0,entityBirdEyeCanvas.width,
+                                                                   entityBirdEyeCanvas.height);
+    entityBirdEyeCtx.restore();
+  }
+
+
+  let cowAnimation = function() {
+    cowCtx.clearRect(0,0,1920,1080);
+    cows.forEach( c => {
+      c.animate();
+    });
+    inspectedBirdEyeUpdate();
+  }
+
+
+
+
+
+  //statMap collects info from graveyard cows action log
+  let statMap = new Map();
+  let updateCall = function() {
+    
+    //console.log("updating");
+    if ( cows.length == 0 ) {
+      clearInterval(id);
+      console.log(graveyard);
+      //run stats on graveyard
+      graveyard.forEach( c => {
+        c.actionLog.forEach ( a => {
+          if (statMap.has(a)) {
+            let old = statMap.get(a);
+            statMap.set(a,old+1);
+          } else {
+            statMap.set(a,1);
+          }
+        });
+      });
+      console.log(statMap);
+    }
+
+    mapCtx.clearRect(0,0,1920,1080);
+    mapCtx.strokeRect(100,100,landScapeWidth,landScapeHeight);
+    tilesUpdate();
+
+    for ( let i = 0; i < animFrames; i++) {
+      setTimeout(cowAnimation,(tick/animFrames)*i);
+    }
+    cowsUpdate();
+    inspectedGeneUpdate();
+
+  }
+
+  //Change selected Cow
+
+
+  //Check if the click hits the bounding area of a cow, to pull up information
+  //about that cow.
+  //TODO
+  //This is busted with the new html layout
+  cowCanvas.addEventListener('click', function(event) {
+    //console.log(event.offsetX," ",event.offsetY);
+    //draw a rect where the click is
+    cowCtx.fillRect(event.offsetX,event.offsetY,10,10);
+
+    //check where the click is
+    cows.forEach( cw => {
+      //determine if the click is inside the path of the cows bounding curve
+      //TODO
+      //This may find many cows at once, some order should be set for a well defind
+      //selection
+
+      //this used to work when canvas was positioned absolutely
+      //and took up a defined amount of space
+      let clickX = event.offsetX;
+      let clickY = event.offsetY;
+      /*
+      let rect = cowCanvas.getBoundingClient();
+      let clickX = event.clientX - rect.left;
+      let clickY = event.clientY - rect.top;
+      */
+      if (cowCtx.isPointInPath(cw.boundingPath,clickX,clickY))
+        {
+          console.log("a cow was clicked", cw);
+          inspectedCow = cw;
+        }
+    });
+  });
+
+  let id = setInterval(updateCall,tick);
+ }
 
 
 

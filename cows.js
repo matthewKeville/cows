@@ -12,19 +12,23 @@ const leftPane = document.querySelector('#leftPane');
 const rightPane = document.querySelector('#rightPane');
 const entityBirdEyePane = document.querySelector('#entityBirdEyePane');
 const entityStatPane = document.querySelector('#entityStatPane');
+const entityStatList = document.querySelector('#statList');
 const entityGenePane = document.querySelector('#entityGenePane');
 
 const cowCanvas = document.querySelector('#cowCanvas');
 const mapCanvas = document.querySelector('#mapCanvas');
 const entityBirdEyeCanvas = document.querySelector('#entityBirdEyeCanvas');
-const entityStatCanvas = document.querySelector('#entityStatCanvas');
 const entityGeneCanvas = document.querySelector('#entityGeneCanvas');
 
 const cowCtx = cowCanvas.getContext('2d'); 
 const mapCtx = mapCanvas.getContext('2d'); 
 const entityBirdEyeCtx = entityBirdEyeCanvas.getContext('2d');
-const entityStatCtx = entityStatCanvas.getContext('2d');
 const entityGeneCtx = entityGeneCanvas.getContext('2d');
+
+const speedSlider = document.querySelector('#speedSlider');
+
+
+
 
 var tileMap =   [];
 var cows =      [];
@@ -33,11 +37,13 @@ var count     = 30;//75;
 var inspectedCow = null;
 var statMap  = new Map();
 var terrainWidth = 800;
-var terrainHeight = 800;
-var terrainX = 200;
-var terrainY = 200;
+var terrainHeight = 400;
+var terrainX = 100;
+var terrainY = 100;
 var polyType = 6;
 var tileArea = 720*(1);
+
+
 const maxFillRecursion = 75;
 // Recurison of 88 , yielded 14255 tiles , and took about 20 seconds to calculate
 /*  with terrainDim = (800,800)
@@ -56,16 +62,27 @@ console.log(tileMap);
 
 let img = document.getElementById("cowsprites");
 
-const tick = 500;     //simulation time step in ms
-const animFrames = 4; //animation frames render between updates
+//const tick = 500;     //simulation time step in ms
+let tick = 500;
+const animFrames = 8; //animation frames render between updates
 
 //Map of Canvases used
 let cans = [   { name: 'map'   , can : mapCanvas          , con: leftPane },
                { name: 'cow'   , can : cowCanvas          , con: leftPane },
                { name: 'bird'  , can : entityBirdEyeCanvas, con: entityBirdEyePane },
-               { name: 'stat'  , can : entityStatCanvas   , con: entityStatPane },
                { name: 'gene'  , can : entityGeneCanvas   , con: entityGenePane }
            ]
+
+//set up logic for slider input
+
+speedSlider.oninput = function() {
+  //console.log(speedSlider.value);
+  tick = speedSlider.value;
+  console.log(tick);
+}
+
+
+
 
 /* Resize each canvas to adhere to the Aspect Ratio */
 let adjustGraphics = function() {
@@ -111,7 +128,14 @@ let adjustGraphics = function() {
     console.log("canvas : " + c.name  + " width : "  + c.can.width + " height :" + c.can.height);
   });
 
+
   //construct the simulation
+  //adjust terrain values before build
+  terrainWidth = mapCanvas.width*(18/20);
+  terrainHeight = mapCanvas.height*(18/20);
+  terrainX = terrainWidth/20;
+  terrainY = terrainHeight/20;
+
   buildTileMap();
   applyTerrain();
   buildCows(count);
@@ -383,10 +407,10 @@ class Rock {
 ////////////////////////////
 //Inhabitants
 ////////////////////////////
-const energyBase = 100;
-const hungerBase = 100;
-const emotionBase = 100;
-const hydrationBase = 100;
+const energyBase = 1000;
+const hungerBase = 1000;
+const emotionBase = 1000;
+const hydrationBase = 1000;
 //Cows are doubly referenced between cow and tile
 class cow {
   constructor(tile,env,size,color,name,genes) {
@@ -1457,14 +1481,40 @@ function start() {
 
 
   //update stat pane
+  /* I should bundle stat pane handling into an object that keeps
+   * track of stats and the corresponding li's so I don't do more work
+   * than I need to */
   let inspectedStatUpdate = function() {
+
+    let ins = inspectedCow;
+
     let dp = function(num) {
       return num.toFixed(4);
     }
 
-    let ins = inspectedCow;
-    let infoGapX = entityStatCanvas.width/8;
-    let infoGapY = entityStatCanvas.height/8;
+    //clear list
+    entityStatList.innerHTML = "";
+
+    //add stat to list
+    function addStat(st) {
+      let li = document.createElement("li");
+      li.appendChild(document.createTextNode(st));
+      entityStatList.appendChild(li);
+    }
+
+    addStat("Name : " + ins.name);
+    addStat("Energy : " + dp(ins.energy));
+    addStat("Hunger : " + dp(ins.hunger));
+    addStat("Emotion : " + dp(ins.emotion));
+    addStat("Hydration : " + dp(ins.hydration));
+    addStat("--------------");
+    addStat("State : " + ins.state);
+    addStat("Ticks : " + ins.ticks);
+    //change the stat list in the dom
+
+    /*
+    let infoGapX = entityStatPane.width/8;
+    let infoGapY = entityStatCanva.height/8;
     let infoStartX = infoGapX;
     let infoStartY = infoGapY;
     entityStatCtx.save();
@@ -1477,6 +1527,7 @@ function start() {
     entityStatCtx.fillText("Hyrdation : " + dp(ins.hydration),infoStartX,infoStartY+infoGapY*4);
 
     entityStatCtx.restore();
+    */
 
     let index = 0;
     let colors = ['Aqua','Aquamarine','BlueViolet','Brown','Charteuse','Chocolate','Blue',
@@ -1493,15 +1544,15 @@ function start() {
     let barGapRatio = .4;   //ratio of space between bars and the space the bars occupy in x
     let barW = entityGeneCanvas.width * (1-barGapRatio) / geneMap.size;
     let barH = entityGeneCanvas.height * (3/4);
-    console.log(barGapRatio);
-    console.log(barW);
-    console.log(barH);
-    console.log(entityGeneCanvas.width);
 
 
     let index = 0;
     let colors = ['Aqua','Aquamarine','BlueViolet','Brown','Charteuse','Chocolate','Blue',
                   'Crimson','Cyan','DarkOrange','DeepPink','DarkRed','Gold'];
+
+    //clear
+    entityGeneCtx.clearRect(0,0,entityGeneCanvas.width,entityGeneCanvas.height);
+
     geneMap.forEach((value,key) => {
       //console.log(key, " : " , value);
       entityGeneCtx.save();
@@ -1632,6 +1683,10 @@ function start() {
     });
   });
 
+  //In order to manipulate time better, or at all dynamically
+  //i need to reconfigure the main loops, if I change tick
+  //after setInterval , it's tick is pass by value and does not 
+  //update.
   //start the main update call
   let id = setInterval(updateCall,tick);
 

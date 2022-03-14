@@ -20,10 +20,14 @@ const entityGeneCtx = entityGeneCanvas.getContext('2d');
 
 const speedSlider = document.querySelector('#speedSlider');
 
+const fpsInstant = document.querySelector('#fpsInstant');
+const fpsAvg     = document.querySelector('#fpsAvg');
+
+
 var tileMap =   [];
 var cows =      [];
 var graveyard = []
-var count     = 30;//75;
+var count     = 1;//75;
 var inspectedCow = null;
 var statMap  = new Map();
 var terrainWidth = 800;
@@ -31,7 +35,9 @@ var terrainHeight = 400;
 var terrainX = 100;
 var terrainY = 100;
 var polyType = 6;
-var tileArea = 720*(1);
+var tileArea = 720*12//720*(1);
+//ad hoc test shows that fps is more adversely affected by rendering tiles not cows..
+var frameCounter = 0;
 
 
 const maxFillRecursion = 75;
@@ -52,8 +58,8 @@ console.log(tileMap);
 
 let img = document.getElementById("cowsprites");
 
-//const tick = 500;     //simulation time step in ms
-let tick = 500;
+//const tick = 3000;     //simulation time step in ms
+let tick = 1000;
 const animFrames = 8; //animation frames render between updates
 
 //Map of Canvases used
@@ -123,6 +129,7 @@ let adjustGraphics = function() {
   buildTileMap();
   applyTerrain();
   buildCows(count);
+  cows[0].debug = true;
   start();
 
 
@@ -231,17 +238,12 @@ class Tile {
 
   //draw the outline of the tile
   draw() {
-   this.ctx.stroke(this.path);
-   if ( this.type != null ) {
-     this.ctx.save();
-     this.ctx.fillStyle = this.type.color;
-     this.ctx.fill(this.path);
-     this.ctx.restore();
-   
-     //why?
-     if (this.type.harvestLevel > 60) {
+   if (this.needsRedraw) {
+     this.ctx.stroke(this.path);
+     if ( this.type != null ) {
        this.ctx.save();
-       this.ctx.fillStyle = 'rgb(255,255,0)';
+       this.ctx.fillStyle = this.type.color;
+       this.ctx.fill(this.path);
        this.ctx.restore();
      }
    }
@@ -249,12 +251,7 @@ class Tile {
 
   update() {
     if ( this.type != null ) {
-      let currentColor = this.type.color;
       this.type.update();
-      if (this.needsRedraw) {
-        this.draw();
-      }
-      this.needsRedraw = (this.currentColor != this.type.color);
     }
   }
 
@@ -319,6 +316,7 @@ class Grass {
     this.hydration      =  hd;
     this.comfort        =  com;
     this.kind = "grass";
+    this.color = grain[Math.ceil( (this.harvestLevel / this.harvestMax)*grain.length )];
   }
 
   update() {
@@ -458,10 +456,12 @@ class cow {
 
     this.state = "idle"; //the current state
 
+    //this.stateStartTime = 0;  //when did we enter this state temporally
+    this.stateCurrentTime = 0; //intra tick time value 0 < sct < tick
+
     this.animTicks = 0; //what phase of animation we are in
     this.animCap = 4;   //how many frames the animation has
-    this.framesPerUpdate = 4;
-
+    this.animSpeed = 1;
     this.boundingPath = null;
 
     ////////////////////////////
@@ -472,7 +472,56 @@ class cow {
 
   //change the animation frame
   //and draw to the canvas
-  animate() {
+  //dt is elapsed time between last draw and this draw
+  draw(dt) {
+
+    //update the time, if it's beyond tick time, cap it at tick time
+    //this.stateCurrentTime = Math.min(this.stateCurrentTime + dt,tick);
+    console.log(this.stateCurrentTime);
+    console.log(tick);
+    this.stateCurrentTime = Math.min(this.stateCurrentTime + dt,tick);
+    let desiredAnimFrames = this.animSpeed * this.animCap; //how many animation states
+                                                           //we request in tick
+    let dat = tick / desiredAnimFrames; // timestep in animation line in ms
+    //animation the lenght of tick divided by desiredAnimFrames
+
+    //
+    //   |--dat--|
+    //
+    //   |______________tick_____________|
+    //
+    //   | - - - + - - - + - - - + - - - |
+    //
+    //       ^
+    //       |
+    //    real time
+    //
+    //       f0      f1      f2      f3      
+    //
+    //       ^        ^
+    //       |        |
+    //    frame buckets
+
+    let animFrameIndex = Math.floor(this.stateCurrentTime / dat);
+    console.log("sub state time    : " , this.stateCurrentTime);
+    console.log("sub state time(S) : " , this.stateCurrentTime/1000);
+    console.log("anim frame ndx    : " , animFrameIndex);
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
 
     let sprWidth  = 128/4;
     let sprHeight = 160/5;
@@ -515,6 +564,7 @@ class cow {
 
     let currentTick = (this.stateTicks * animFrames) + this.animTicks;
 
+    /*
     if (this.debug) {
       console.log("stateTick : ", this.stateTicks);
       console.log("stateCap : ", this.stateCap);
@@ -526,6 +576,7 @@ class cow {
       console.log("total ticks : " , totalTicks);
       console.warn("----------------------------");
     }
+    */
 
 
 
@@ -535,10 +586,19 @@ class cow {
       //move centeredx and centerdy such that the correspond to a point
       //on the line between where we are moving. The line is discretized
       //by anim ticks with a length of (stateTicks * animCap)
+      
+      /*
       let moveVector = this.tile.cp.sub(this.previousTile.cp);
 
       dx = this.previousTile.cp.x + (currentTick/totalTicks)*moveVector.x - sprWidth/2;
       dy = this.previousTile.cp.y + (currentTick/totalTicks)*moveVector.y - sprHeight/2;
+
+      //adjusted for new anim scheme
+      dx = this.previousTile.cp.x + 
+           (this.stateCurrentTime/(this.stateTicks*tick))*moveVector.x - sprWidth/2;
+      dy = this.previousTile.cp.y +
+           (this.stateCurrentTime/(this.stateTicks*tick))*moveVector.y - sprHeight/2;
+
 
       //calculate the cardinal direction i am facing
       
@@ -577,6 +637,7 @@ class cow {
         //adjust dx for flipped scale
         dx = -dx - sprWidth;
       }
+      */
 
     } else if (this.state == "idle") {
       // 3 x [ 0 1 ]
@@ -805,13 +866,6 @@ class cow {
       //update audit
       this.tilesTraveled++;
 
-      //state housekeeping
-      this.state = "move";
-      this.stateTicks = 0;
-      this.stateCap = 4;
-      //anim housekeeping
-      this.animTicks = 0;
-      this.animCap = 4;
 
   }
 
@@ -827,13 +881,6 @@ class cow {
       //audit
       this.energyRestored += energyBack;
 
-      //state housekeeping
-      this.state = "rest";
-      this.stateTicks = 0;
-      this.stateCap = 8;
-      //anim housekeeping
-      this.animTicks = 0;
-      this.animCap = 2;
     }
   }
 
@@ -855,24 +902,10 @@ class cow {
       //audit
       this.hungerRestored += meal;
 
-      //state housekeeping
-      this.state = "eat";
-      this.stateTicks = 0;
-      this.stateCap = 4;
-      //anim housekeeping
-      this.animTicks = 0;
-      this.animCap = 2;
     }
   }
 
   idle() {
-    //state housekeeping
-    this.state = "idle";
-    this.stateTicks = 0;
-    this.stateCap = 2;
-    //anim housekeeping
-    this.animTicks = 0;
-    this.animCap = 2;
   }
 
 
@@ -886,15 +919,6 @@ class cow {
       this.hydration += sip;
       //audit
       this.hydrationRestored += sip;
-
-      //state housekeeping
-      this.state = "drink";
-      this.stateTicks = 0;
-      this.stateCap = 2;
-      //anim housekeeping
-      this.animTicks = 0;
-      this.animCap = 2;
-
     }
   }
 
@@ -918,20 +942,77 @@ class cow {
       if (action == "eat") {
         this.consume();  
         this.actionLog.push("eat");
+
+        //state housekeeping
+        this.state = "eat";
+        this.stateTicks = 0;
+        this.stateCap = 4;
+        //anim housekeeping
+        this.animTicks = 0;
+        this.animCap = 2;
+
       } else if ( action == "rest" ) {
         this.rest();
         this.actionLog.push("rest");
+
+        //state housekeeping
+        this.state = "rest";
+        this.stateTicks = 0;
+        this.stateCap = 8;
+        //anim housekeeping
+        this.animTicks = 0;
+        this.animCap = 2;
+        this.animSpeed = 1;
+
       } else if ( action == "move" ) {
         this.move();
         this.actionLog.push("move");
+
+        //state housekeeping
+        this.state = "move";
+        this.stateTicks = 0;
+        this.stateCap = 4;
+        //anim housekeeping
+        this.animTicks = 0;
+        this.animCap = 4;
+        this.animSpeed = 1;
+
+
       } else if ( action == "drink" ) {
         this.drink();
         this.actionLog.push("drink");
+
+        //state housekeeping
+        this.state = "drink";
+        this.stateTicks = 0;
+        this.stateCap = 2;
+        //anim housekeeping
+        this.animTicks = 0;
+        this.animCap = 2;
+        this.animSpeed = 1;
+
       } else if ( action == "idle") {
         this.idle();
         this.actionLog.push("idle");
+
+        //state housekeeping
+        this.state = "idle";
+        this.stateTicks = 0;
+        this.stateCap = 2;
+        //anim housekeeping
+        this.animTicks = 0;
+        this.animCap = 2;
+        this.animSpeed = 1;
+
+
       }
+
     }
+
+
+    //Log the start of the new state tick;
+    this.stateCurrentTime = 0;
+
 
     // TODO
     //Biological consequences should be affected by the environment
@@ -992,6 +1073,10 @@ class cow {
       */
     }
   }
+
+
+
+
 }
 
 
@@ -1197,9 +1282,12 @@ function buildTileMap() {
   frontier.push(tt);
   //fill out the tileMap
   //Log time elapsed
-  console.time('FillingMap');
+  //console.time('FillingMap');
+  let st = performance.now();
   [frontier,tileMap] = fill(frontier,tileMap,terrainWidth,terrainHeight,terrainX,terrainY);
-  console.timeEnd('FillingMap');
+  let fn = performance.now();
+  console.log("Filling time in Seconds" , (fn-st)/100000);
+  //console.timeEnd('FillingMap');
   console.log(tileMap);
 
 }
@@ -1317,6 +1405,26 @@ function cowsUpdate() {
     });
   }
 
+/////////////////////////////
+// runStat                 //
+/////////////////////////////
+function runStat() {
+
+  clearInterval(id);
+  console.log(graveyard);
+  //run stats on graveyard
+  graveyard.forEach( c => {
+    c.actionLog.forEach ( a => {
+      if (statMap.has(a)) {
+        let old = statMap.get(a);
+        statMap.set(a,old+1);
+      } else {
+        statMap.set(a,1);
+      }
+    });
+  });
+}
+
 
 ////////////////////////////
 // Update Stat Pane       //
@@ -1427,12 +1535,21 @@ function inspectedBirdEyeUpdate() {
 ////////////////////////////////
 
 
-function cowAnimation() {
-  cowCtx.clearRect(0,0,1920,1080);
+function cowDraw(dt) {
+  //clear canvas
+  cowCtx.clearRect(0,0,cowCanvas.width,cowCanvas.height);
+  //redraw
   cows.forEach( c => {
-    c.animate();
+    c.draw(dt);
   });
-  inspectedBirdEyeUpdate();
+}
+
+function tileDraw() {
+  //dont need to clear
+  //mapCtx.clearRect(0,0,mapCanvas.width,mapCanvas.height);
+  tileMap.forEach( t => {
+    t.draw();
+  });
 }
 
 
@@ -1442,36 +1559,35 @@ function cowAnimation() {
 
 
 function updateCall() {
-  if ( cows.length == 0 ) {
-    clearInterval(id);
-    console.log(graveyard);
-    //run stats on graveyard
-    graveyard.forEach( c => {
-      c.actionLog.forEach ( a => {
-        if (statMap.has(a)) {
-          let old = statMap.get(a);
-          statMap.set(a,old+1);
-        } else {
-          statMap.set(a,1);
-        }
-      });
-    });
+  console.log("frames last update : ", frameCounter );
+  let avgFps = frameCounter * (1 / (tick/1000));
+  fpsAvg.textContent = avgFps.toFixed(2);
+
+  frameCounter = 0;
+
+  if (cows.length == 0) {
+    runStat();
     console.log(statMap);
   }
 
-  //previously used landscapeWidth and landscapeheight
-  //will change back later when those are global vars
-  mapCtx.clearRect(terrainX,terrainY,terrainWidth,terrainHeight);
-  mapCtx.strokeRect(terrainX,terrainY,terrainWidth,terrainHeight);
-  tilesUpdate();
-
-  for ( let i = 0; i < animFrames; i++) {
-    setTimeout(cowAnimation,(tick/animFrames)*i);
-  }
+  //tilesUpdate();
   cowsUpdate();
+
+}
+
+
+function drawAll(prevTime) {
+  let now = performance.now();
+  let dt =  now - prevTime;
+  tileDraw();
+  cowDraw(dt);
   inspectedGeneUpdate();
   inspectedStatUpdate();
-
+  inspectedBirdEyeUpdate();
+  let drawTime = performance.now() - now;
+  frameCounter++;
+  fpsInstant.textContent = (1/(dt/1000)).toFixed(2);
+  window.requestAnimationFrame(drawAll,now);
 }
 
 
@@ -1480,7 +1596,10 @@ function start() {
 
   //set an inspected cow for the entity pane
   inspectedCow = cows[0];
-
+  //give each cow an initial state
+  cows.forEach( c => {
+    c.update();
+  });
 
   /////////////////////////
   //Change selected Cow
@@ -1507,12 +1626,11 @@ function start() {
     });
   });
 
-  //In order to manipulate time better, or at all dynamically
-  //i need to reconfigure the main loops, if I change tick
-  //after setInterval , it's tick is pass by value and does not 
-  //update.
-  //start the main update call
+  //Simulation Logic Loop
   let id = setInterval(updateCall,tick);
+  //Simulation Animation Loop
+  let startTime = performance.now()
+  window.requestAnimationFrame(drawAll,startTime);
 
 }
 

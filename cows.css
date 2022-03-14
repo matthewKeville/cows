@@ -49,12 +49,14 @@ canvas {
  * using relative positioning , I wanted to do that because relative positioning
  * is the only way I got the bird's eye view canvas to load properly ... */
 #cowCanvas {
+  z-index: 6;
   position: absolute;
   left:0;
   top:0;
 }
 
 #mapCanvas {
+  z-index: 5;
   position: absolute;
   left:0;
   top:0;
@@ -128,5 +130,25 @@ canvas {
   /*
   overflow: scroll;
   */
+}
+#fpsList {
+  z-index: 10;
+  list-style: none;
+  border: 0px;
+  padding: 0px;
+}
+
+li.fps {
+  z-index: 10;
+  font-size: 14px;
+  font-family: sans-serif,Arial;
+  color: black;
+}
+
+span.fps {
+  z-index: 10;
+  font-size: 14px;
+  font-family: sans-serif,Arial;
+  color: green;
 }
 

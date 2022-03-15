@@ -13,3 +13,18 @@ I.e. dynamic elements such as cows. Tiles will never need to have paths recalcul
 
 event offsetX differs than x
 x is the true coordinate of the entire html document ...
+
+// Request Animation Frame //
+
+1. Capped at the refresh of the display
+2. making frames to quickly
+   all frames are rendered in about 4ms but tick 500ms
+   the way draw(dt) is written , it only gets to timesteps 
+   in the first time bucket : tick/animCap*animCycles
+
+3. I need to rethink approach to draw  or
+4. change the callback on request animationFrame to spread its frames over
+   the tick interval. Something like keeping track of time elapsed since last tick
+   , splitting the tick time over the target refresh rate : tick / 60 
+   and waiting until time passes each time phase
+   tick / 60 , 2*tick / 60 , 3*tick /60 ... tick

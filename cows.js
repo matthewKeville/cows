@@ -1,4 +1,4 @@
-//Hook into the DOM
+///Hook into the DOM
 const AspectRatio = { x : 16 , y : 9 };
 
 const leftPane = document.querySelector('#leftPane');
@@ -27,17 +27,24 @@ const fpsAvg     = document.querySelector('#fpsAvg');
 var tileMap =   [];
 var cows =      [];
 var graveyard = []
-var count     = 1;//75;
+var count     = 30;//75;
 var inspectedCow = null;
 var statMap  = new Map();
-var terrainWidth = 800;
-var terrainHeight = 400;
-var terrainX = 100;
-var terrainY = 100;
+var terrainWidth = 400;//800;
+var terrainHeight = 200;//400;
+var terrainX = 400;
+var terrainY = 600;
 var polyType = 6;
-var tileArea = 720*12//720*(1);
+var tileArea = 720*8//720*(1);
 //ad hoc test shows that fps is more adversely affected by rendering tiles not cows..
 var frameCounter = 0;
+
+const maxUpdates = 100;//10100;
+let tickCounter = 0;
+let simId = null;
+let renderTimeMapList = [];
+let updateTimeMapList = [];
+let tilesRedraw = true;
 
 
 const maxFillRecursion = 75;
@@ -53,14 +60,10 @@ const maxFillRecursion = 75;
  *  62 recursion , and 13 seconds
  */
 
-console.log(tileMap);
-
-
 let img = document.getElementById("cowsprites");
 
 //const tick = 3000;     //simulation time step in ms
-let tick = 1000;
-const animFrames = 8; //animation frames render between updates
+let tick = 10;
 
 //Map of Canvases used
 let cans = [   { name: 'map'   , can : mapCanvas          , con: leftPane },
@@ -129,7 +132,6 @@ let adjustGraphics = function() {
   buildTileMap();
   applyTerrain();
   buildCows(count);
-  cows[0].debug = true;
   start();
 
 
@@ -422,6 +424,7 @@ class cow {
     this.color = color;
     this.name = name;
 
+
     this.energyCap = energyBase * this.endurance;  
     this.hungerCap = hungerBase * this.satiation;
     this.emotionCap = emotionBase * this.mindfullness;
@@ -455,11 +458,9 @@ class cow {
     this.stateCap   = 0; //how many ticks the current state will last
 
     this.state = "idle"; //the current state
+    this.facing = "north"; 
+    this.pos = tile.cp;  //where the cow is intra-state
 
-    //this.stateStartTime = 0;  //when did we enter this state temporally
-    this.stateCurrentTime = 0; //intra tick time value 0 < sct < tick
-
-    this.animTicks = 0; //what phase of animation we are in
     this.animCap = 4;   //how many frames the animation has
     this.animSpeed = 1;
     this.boundingPath = null;
@@ -470,74 +471,33 @@ class cow {
     this.debug = false;
   }
 
-  //change the animation frame
   //and draw to the canvas
-  //dt is elapsed time between last draw and this draw
-  draw(dt) {
-
-    //update the time, if it's beyond tick time, cap it at tick time
-    //this.stateCurrentTime = Math.min(this.stateCurrentTime + dt,tick);
-    console.log(this.stateCurrentTime);
-    console.log(tick);
-    this.stateCurrentTime = Math.min(this.stateCurrentTime + dt,tick);
-    let desiredAnimFrames = this.animSpeed * this.animCap; //how many animation states
-                                                           //we request in tick
-    let dat = tick / desiredAnimFrames; // timestep in animation line in ms
-    //animation the lenght of tick divided by desiredAnimFrames
-
-    //
-    //   |--dat--|
-    //
-    //   |______________tick_____________|
-    //
-    //   | - - - + - - - + - - - + - - - |
-    //
-    //       ^
-    //       |
-    //    real time
-    //
-    //       f0      f1      f2      f3      
-    //
-    //       ^        ^
-    //       |        |
-    //    frame buckets
-
-    let animFrameIndex = Math.floor(this.stateCurrentTime / dat);
-    console.log("sub state time    : " , this.stateCurrentTime);
-    console.log("sub state time(S) : " , this.stateCurrentTime/1000);
-    console.log("anim frame ndx    : " , animFrameIndex);
-
-
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
+  draw() {
+    /*
+    console.log("drawing cow");
+    console.log("state tick : " , this.stateTicks); 
+    console.log("state cap  : " , this.stateCap);
+    console.log("% transition : " , this.stateTicks /this.stateCap);
+    */
 
     let sprWidth  = 128/4;
     let sprHeight = 160/5;
 
     //where to place sprites so they are centered at
-    //our tiles center point
-    let centeredx = this.tile.cp.x - sprWidth/2;
-    let centeredy = this.tile.cp.y - sprHeight/2;
+    //our tiles ? (position)  center point
+    let centeredx = this.pos.x - sprWidth/2;
+    let centeredy = this.pos.y - sprHeight/2;
     
     //source origin
+    //frame position in sprite sheet, derived from 
+    //the stateTick % animCap
     let sx = 0;
     let sy = 0;
 
     //destination origin
     let dx = centeredx;
     let dy = centeredy;
+
 
     //orientation of canvas context,
     //when sprites need to be flipped, we must 
@@ -553,116 +513,55 @@ class cow {
     // Calculate animation state
     ///////////////////////////////
 
-    let totalTicks = this.stateCap * animFrames;
-    //if the animation loop requests less frames than
-    //the entire animation requires, we sub sample the frames
-    //and adjust our total ticks to account for this when we 
-    //traverse the line between the source and target
-    if (animFrames < this.animCap) {
-      totalTicks = this.stateCap * animFrames;
-    }
-
-    let currentTick = (this.stateTicks * animFrames) + this.animTicks;
-
-    /*
-    if (this.debug) {
-      console.log("stateTick : ", this.stateTicks);
-      console.log("stateCap : ", this.stateCap);
-      console.log("animTick : ", this.animTicks);
-      console.log("animTick % animCap : " , this.animTicks % this.animCap);
-      console.log("animCap : ", this.animCap);
-      console.log("animFrames : ", animFrames);
-      console.log("current tick : " , currentTick);
-      console.log("total ticks : " , totalTicks);
-      console.warn("----------------------------");
-    }
-    */
-
-
 
     if (this.state == "move") {
 
        stateText = "kyyyYAaa";
-      //move centeredx and centerdy such that the correspond to a point
-      //on the line between where we are moving. The line is discretized
-      //by anim ticks with a length of (stateTicks * animCap)
-      
-      /*
-      let moveVector = this.tile.cp.sub(this.previousTile.cp);
-
-      dx = this.previousTile.cp.x + (currentTick/totalTicks)*moveVector.x - sprWidth/2;
-      dy = this.previousTile.cp.y + (currentTick/totalTicks)*moveVector.y - sprHeight/2;
-
-      //adjusted for new anim scheme
-      dx = this.previousTile.cp.x + 
-           (this.stateCurrentTime/(this.stateTicks*tick))*moveVector.x - sprWidth/2;
-      dy = this.previousTile.cp.y +
-           (this.stateCurrentTime/(this.stateTicks*tick))*moveVector.y - sprHeight/2;
-
-
-      //calculate the cardinal direction i am facing
-      
-      let dirVec = new point(this.tile.cp.x - this.previousTile.cp.x ,this.tile.cp.y - this.previousTile.cp.y)
-      let facing = null;
-    
-      let angleDirs = [];
-      angleDirs.push({ dir: "north" , dist : vecAngle(dirVec,new point(0,-1)) } ); //north
-      angleDirs.push({ dir: "east" , dist : vecAngle(dirVec,new point(1,0)) } ); //east
-      angleDirs.push({ dir: "south" , dist : vecAngle(dirVec,new point(0,1)) } ); //south
-      angleDirs.push({ dir: "west" , dist : vecAngle(dirVec,new point(-1,0)) } ); //west
-
-      let closest = 0;
-      for ( let i = 0; i < angleDirs.length; i++ ) {
-        if (angleDirs[i].dist < angleDirs[closest].dist) {
-          closest = i;
-        }
-      }
-      facing = angleDirs[closest].dir;
-
       //determine direction and adjust sprite indices accordingly
       //at the same time find parameters that will illustrate
       //the direction moved confined to N E S W
 
-      sx = (this.animTicks % this.animCap)*sprWidth;
+      sx = (this.stateTicks % this.animCap)*sprWidth;
 
-      if ( facing == "north" ) {
+      if ( this.facing == "north" ) {
         sy = sprHeight * 2;
-      } else if ( facing == "east" ) {
+      } else if ( this.facing == "east" ) {
         sy = sprHeight * 1;
-      } else if ( facing == "south") {
+      } else if ( this.facing == "south") {
         sy = sprHeight * 0;
       } else {
+        console.log(" I am facing " + this.facing);
         sy = sprHeight * 1;
         scaleX = -1;
         //adjust dx for flipped scale
+        //something is wrong here
         dx = -dx - sprWidth;
       }
-      */
 
     } else if (this.state == "idle") {
       // 3 x [ 0 1 ]
-      sx = (this.animTicks % this.animCap) * sprWidth;
+      sx = (this.stateTicks % this.animCap) * sprWidth;
       sy = 3 * sprHeight;
 
       stateText = "MoooOOooo";
 
     } else if (this.state == "eat") {
       // 4 x [ 0 1 ]
-      sx = (this.animTicks % this.animCap) * sprWidth;
+      sx = (this.stateTicks % this.animCap) * sprWidth;
       sy = 4 * sprHeight;
 
       stateText = "munch munch";
 
     } else if (this.state == "rest") {
       // 4 x [ 2 3 ]
-      sx = ( (this.animTicks % this.animCap) + 2)*sprWidth;
+      sx = ( (this.stateTicks % this.animCap) + 2)*sprWidth;
       sy = 4 * sprHeight;
 
       stateText = "zzZzzZzzZ";
 
     } else if (this.state == "drink") {
       // 4 x [ 2 3 ]
-      sx = ((this.animTicks % this.animCap) + 2) * sprWidth;
+      sx = ((this.stateTicks % this.animCap) + 2) * sprWidth;
       sy = 4 * sprHeight;
 
       this.ctx.fillStyle = "red";
@@ -674,11 +573,15 @@ class cow {
     this.ctx.save();
     this.ctx.scale(scaleX,scaleY);
     this.ctx.drawImage(cowsprites,sx,sy,sprWidth,sprHeight,dx,dy,sprWidth,sprHeight);
+    this.ctx.restore();
+    //change dx to normal scale
+    //only needed it to be flipped for rendering on negative x scale for westward movement.
+    dx = centeredx;
 
+    //I may be able to translate the path instead of recalculating like this
     //update the bounding path of the cow
     this.boundingPath = new Path2D();
     this.boundingPath.arc(dx+sprWidth/2,dy+sprHeight/2,this.size,0,2*Math.PI); 
-    this.ctx.stroke(this.boundingPath);
 
     /*
     //apply a hue of this cow's color to the drawn image
@@ -690,8 +593,8 @@ class cow {
     this.ctx.globalCompositionOperation = "source-over";
     this.ctx.restore();
     */
-    this.ctx.restore();
 
+    
 
     //info bars
     this.ctx.fillStyle = "green";
@@ -720,10 +623,6 @@ class cow {
     this.ctx.font = '12px monospace';
     this.ctx.fillText(stateText,dx,dy - this.size);
 
-    //update animation state
-    //if animCap < animFrames , we duplicate the animation
-    //if animCap > animFrames , we truncate the animation
-    this.animTicks = (this.animTicks + 1) % animFrames;
   }
 
   //consider th state and the environmnet, what action will I take
@@ -775,7 +674,7 @@ class cow {
     if (vacancy == 0 || this.energy < 10) {
       move = 0;
     }
- 
+
     if (this.hunger >= this.hungerCap) {
       eat = 0;
     }
@@ -824,8 +723,11 @@ class cow {
     let chance = Math.random();
     let choice = null;
 
+    // this needs to be redone , does not work when some buckets are zero'd out
     if ( chance < move) {
+      //debug option
       choice = "move"; 
+      //choice = "eat";
     } else if ( chance < move + eat) {
       choice = "eat";
     } else if (chance < move + eat + rest){
@@ -932,6 +834,24 @@ class cow {
     this.ticks++;
     if (this.stateTicks != this.stateCap) {
       this.stateTicks++;
+      //update the intra state position of the cow
+      if (this.state == "move") {
+        //find the vector pointing to the destination
+        let moveVector = (this.tile.cp).sub(this.previousTile.cp);
+        //calculate the change in position for each tick over
+        //the stateCap interval
+        let dx = (1/this.stateCap)*moveVector.x;
+        let dy = (1/this.stateCap)*moveVector.y;
+        this.pos = this.pos.add(new point(dx,dy));      
+
+      //below else exists for debugging move logic
+      }
+      /*
+      else {
+        this.pos = this.tile.cp;
+      }
+      */
+
     } 
 
     //only change state of current state is finished
@@ -946,9 +866,8 @@ class cow {
         //state housekeeping
         this.state = "eat";
         this.stateTicks = 0;
-        this.stateCap = 4;
+        this.stateCap = 40;
         //anim housekeeping
-        this.animTicks = 0;
         this.animCap = 2;
 
       } else if ( action == "rest" ) {
@@ -958,9 +877,8 @@ class cow {
         //state housekeeping
         this.state = "rest";
         this.stateTicks = 0;
-        this.stateCap = 8;
+        this.stateCap = 80;
         //anim housekeeping
-        this.animTicks = 0;
         this.animCap = 2;
         this.animSpeed = 1;
 
@@ -971,11 +889,29 @@ class cow {
         //state housekeeping
         this.state = "move";
         this.stateTicks = 0;
-        this.stateCap = 4;
+        this.stateCap = 10;
         //anim housekeeping
-        this.animTicks = 0;
         this.animCap = 4;
         this.animSpeed = 1;
+
+        //calculate the cardinal direction i am facing
+        let dirVec = new point(this.tile.cp.x - this.previousTile.cp.x ,this.tile.cp.y - this.previousTile.cp.y)
+        let facing = null;
+      
+        let angleDirs = [];
+        angleDirs.push({ dir: "north" , dist : vecAngle(dirVec,new point(0,-1)) } ); //north
+        angleDirs.push({ dir: "east" , dist : vecAngle(dirVec,new point(1,0)) } ); //east
+        angleDirs.push({ dir: "south" , dist : vecAngle(dirVec,new point(0,1)) } ); //south
+        angleDirs.push({ dir: "west" , dist : vecAngle(dirVec,new point(-1,0)) } ); //west
+
+        let closest = 0;
+        for ( let i = 0; i < angleDirs.length; i++ ) {
+          if (angleDirs[i].dist < angleDirs[closest].dist) {
+            closest = i;
+          }
+        }
+        this.facing = angleDirs[closest].dir;
+
 
 
       } else if ( action == "drink" ) {
@@ -985,9 +921,8 @@ class cow {
         //state housekeeping
         this.state = "drink";
         this.stateTicks = 0;
-        this.stateCap = 2;
+        this.stateCap = 20;
         //anim housekeeping
-        this.animTicks = 0;
         this.animCap = 2;
         this.animSpeed = 1;
 
@@ -998,9 +933,8 @@ class cow {
         //state housekeeping
         this.state = "idle";
         this.stateTicks = 0;
-        this.stateCap = 2;
+        this.stateCap = 20;
         //anim housekeeping
-        this.animTicks = 0;
         this.animCap = 2;
         this.animSpeed = 1;
 
@@ -1021,9 +955,9 @@ class cow {
     //Biological consequences
 
     //Ever update hunger is depleted.
-    this.hunger--;
-    this.energy--;
-    this.hydration--;
+    this.hunger -= .2;
+    this.energy -= .2;
+    this.hydration -= .2;
 
     // if hunger is severly low , energy is affected more drastically
     let hungerSeverity = 5 - Math.floor( (this.hunger / this.hungerCap)*10);
@@ -1192,8 +1126,6 @@ function fill(frontier,closed,width,height,x,y,debug=0) {
                tile.neighbors.push(newTile);
                newTile.neighbors.push(tile);
                newFrontier.push(newTile);
-               //ctx.fillRect(vx,vy,10*debug,10*debug);
-               //ctx.fillRect(vx,vy,10,10);
           } else if (frontierIndex != -1)  {
             //link the tile we branch from with the found tile in the current frontier
             //it already exists but has incomplete neighbor data
@@ -1343,6 +1275,10 @@ function applyTerrain() {
 
 
 function buildCows(count) {
+  if ( count > tileMap.length ) {
+    console.warn("Requested More Cows Than Tiles, Truncating Count to fit");
+    count = tileMap.length;
+  }
 
   //reset cows and graveyard
   cows = [];
@@ -1363,7 +1299,9 @@ function buildCows(count) {
       let tile = tileMap[tileIndex];
       if (tile.occupant == null) {
         startFound = true;
-        cows.push(makeCow(tile,tileMap));
+        let newCow = makeCow(tile,tileMap);
+        tile.occupant = newCow;
+        cows.push(newCow);
       }
     }
   }
@@ -1386,7 +1324,7 @@ function tilesUpdate() {
 // Update Cows     (Logical)  //
 ////////////////////////////////
 function cowsUpdate() {
-    console.warn("---------Cows update----------------");
+    console.warn("---------Cows update--- " + tickCounter + " -----");
     cows.forEach( c => {
       c.update();
     });
@@ -1432,7 +1370,10 @@ function runStat() {
 
 
 function inspectedStatUpdate() {
-
+    //only render if a cow is inspected
+    if (inspectedCow == null) {
+      return
+    }
     let ins = inspectedCow;
 
     let dp = function(num) {
@@ -1507,6 +1448,12 @@ function inspectedGeneUpdate() {
 
 
 function inspectedBirdEyeUpdate() {
+  //only render if a cow is inspected
+  if (inspectedCow == null) {
+    return
+  }
+
+  //let Icp = inspectedCow.pos;  //follow on movement (cow true position causes artifacting )
   let Icp = inspectedCow.tile.cp;
   //birdW and birdH should be a function of intended zoom
   //we want to confine the space in the cow and map canvas to be strictly less
@@ -1519,14 +1466,19 @@ function inspectedBirdEyeUpdate() {
   let birdX = Icp.x - birdW/2;
   let birdY = Icp.y - birdH/2;
   let scale = 1;
-  entityBirdEyeCtx.save();
-  entityBirdEyeCtx.imageSmoothingQuality = "high"; /* makes huge difference here */
+  //entityBirdEyeCtx.imageSmoothingQuality = "high"; /* makes huge difference here */
   entityBirdEyeCtx.clearRect(0,0,entityBirdEyeCanvas.width,entityBirdEyeCanvas.height);
   entityBirdEyeCtx.drawImage(mapCanvas,birdX,birdY,birdW,birdH,0,0,entityBirdEyeCanvas.width,
                                                                  entityBirdEyeCanvas.height);
   entityBirdEyeCtx.drawImage(cowCanvas,birdX,birdY,birdW,birdH,0,0,entityBirdEyeCanvas.width,
                                                                  entityBirdEyeCanvas.height);
-  entityBirdEyeCtx.restore();
+  /*
+  let mapImg = mapCtx.getImageData(birdX,birdY,birdW,birdH);
+  entityBirdEyeCtx.putImageData(mapImg,0,0,entityBirdEyeCanvas.width,entityBirdEyeCanvas.width);
+
+  let cowImg = cowCtx.getImageData(birdX,birdY,birdW,birdH);
+  entityBirdEyeCtx.putImageData(cowImg,0,0,entityBirdEyeCanvas.width,entityBirdEyeCanvas.width);
+  */
 }
 
 
@@ -1540,7 +1492,7 @@ function cowDraw(dt) {
   cowCtx.clearRect(0,0,cowCanvas.width,cowCanvas.height);
   //redraw
   cows.forEach( c => {
-    c.draw(dt);
+    c.draw();
   });
 }
 
@@ -1559,35 +1511,177 @@ function tileDraw() {
 
 
 function updateCall() {
-  console.log("frames last update : ", frameCounter );
-  let avgFps = frameCounter * (1 / (tick/1000));
-  fpsAvg.textContent = avgFps.toFixed(2);
+  if ( tickCounter > maxUpdates )  {
+    clearInterval(simId);
 
-  frameCounter = 0;
 
-  if (cows.length == 0) {
-    runStat();
-    console.log(statMap);
+    let renderGroups = ["cows","tiles","genes","stats","birds","total","rDiff"]
+    let rs = {};
+    renderGroups.forEach( rg => {
+      rs[rg] = {
+        avg : 0,
+        max    : 0,
+        min    : Number.MAX_VALUE,
+        std    : 0
+
+      }
+    });
+
+    //Pass 1
+    renderTimeMapList.forEach ( rtm => {
+      renderGroups.forEach ( rg => {
+        rs[rg].avg += rtm[rg];
+        rs[rg].min = Math.min(rs[rg].min,rtm[rg]);
+        rs[rg].max = Math.max(rs[rg].max,rtm[rg]);
+      });
+    });
+ 
+    //Complete Averages
+    renderGroups.forEach( rg => {
+      rs[rg].avg /= renderTimeMapList.length;
+    });
+
+    //Standard Deviation
+    renderGroups.forEach( rg => {
+      renderTimeMapList.forEach ( rtm => {
+        rs[rg].std += Math.pow(rtm[rg] - rs[rg].avg,2);
+      });
+      rs[rg].std = Math.sqrt( rs[rg].std / renderTimeMapList.length );
+    });
+
+
+    console.warn("--------Stats For Frame Rendering--------");
+    console.log(rs); 
+
+    let updateGroups = ["cows","tiles","total"]
+    let us = {};
+    updateGroups.forEach( ug => {
+      us[ug] = {
+        avg : 0,
+        max    : 0,
+        min    : Number.MAX_VALUE,
+        std    : 0
+
+      }
+    });
+
+    //Pass 1
+    updateTimeMapList.forEach ( utm => {
+      updateGroups.forEach ( ug => {
+        us[ug].avg += utm[ug];
+        us[ug].min = Math.min(us[ug].min,utm[ug]);
+        us[ug].max = Math.max(us[ug].max,utm[ug]);
+      });
+    });
+ 
+    //Complete Averages
+    updateGroups.forEach( ug => {
+      us[ug].avg /= updateTimeMapList.length;
+    });
+
+    //Standard Deviation
+    updateGroups.forEach( ug => {
+      updateTimeMapList.forEach ( utm => {
+        us[ug].std += Math.pow(utm[ug] - us[ug].avg,2);
+      });
+      us[ug].std = Math.sqrt( us[ug].std / updateTimeMapList.length );
+    });
+
+
+
+    /*
+    //Analyze Update deltas
+    let uavgs = { cows  : 0,
+                 tiles : 0,
+                 total : 0
+                };
+    //console.log(updateTimeMapList); 
+    updateTimeMapList.forEach ( utm => {
+      Object.keys(utm).forEach( key => {
+        uavgs[key] += utm[key];
+      });
+    });
+    Object.keys(uavgs).forEach ( key => {
+      uavgs[key] /= updateTimeMapList.length;
+    });
+    */
+
+    console.warn("--------Stats For Update Processing--------");
+    console.log(us);
+
+
+  } else { 
+
+
+    let start = performance.now();
+    tilesRedraw = true;
+    cowsUpdate();
+    let cowF  = performance.now();
+    tilesUpdate();
+    let finish = performance.now();
+    console.log("Update Call took : ", finish - start);
+    tickCounter++;
+
+    let updateTimeMap = {
+      cows  : cowF - start,
+      tiles : finish - cowF,
+      total : finish - start
+    }
+
+    updateTimeMapList.push(updateTimeMap);
+
+    if (cows.length == 0) {
+      runStat();
+      console.warn("--------Cow Sim Stats --------");
+      console.log(statMap);
+    }
+
+    let avgFps = frameCounter * (1 / (tick/1000));
+    fpsAvg.textContent = avgFps.toFixed(2);
+    frameCounter = 0;
+    console.log("frames last update : ", frameCounter );
+
+
   }
-
-  //tilesUpdate();
-  cowsUpdate();
 
 }
 
 
-function drawAll(prevTime) {
-  let now = performance.now();
-  let dt =  now - prevTime;
-  tileDraw();
-  cowDraw(dt);
-  inspectedGeneUpdate();
-  inspectedStatUpdate();
-  inspectedBirdEyeUpdate();
-  let drawTime = performance.now() - now;
-  frameCounter++;
-  fpsInstant.textContent = (1/(dt/1000)).toFixed(2);
-  window.requestAnimationFrame(drawAll,now);
+function drawAll(lastRender) {
+  if ( tickCounter > maxUpdates ) {
+    return
+  } else {
+    let start = performance.now();
+    if (tilesRedraw) { //only draw tiles once per tick
+      tileDraw();
+      tilesRedraw = false;
+    }
+    let tileF = performance.now();
+    cowDraw();
+    let cowF = performance.now();
+    inspectedGeneUpdate();
+    let geneF = performance.now();
+    inspectedStatUpdate();
+    let statF = performance.now();
+    inspectedBirdEyeUpdate();
+    let birdF = performance.now();
+
+    let end = birdF;
+    let dt = end - lastRender;
+    let deltas = { tiles : tileF - start , 
+                   cows  : cowF - tileF  ,
+                   genes : geneF - cowF  ,
+                   stats : statF - geneF ,
+                   birds : birdF - statF ,
+                   total : birdF - start ,
+                   rDiff : dt
+                 }
+    //console.log(deltas);
+    renderTimeMapList.push(deltas);
+    frameCounter++;
+    fpsInstant.textContent = (1/(dt/1000)).toFixed(2);
+    window.requestAnimationFrame(drawAll,end);
+  }
 }
 
 
@@ -1627,10 +1721,10 @@ function start() {
   });
 
   //Simulation Logic Loop
-  let id = setInterval(updateCall,tick);
+  simId = setInterval(updateCall,tick);
   //Simulation Animation Loop
-  let startTime = performance.now()
-  window.requestAnimationFrame(drawAll,startTime);
+  //let startTime = performance.now()
+  window.requestAnimationFrame(drawAll,performance.now());
 
 }
 

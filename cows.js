@@ -19,6 +19,8 @@ const entityBirdEyeCtx = entityBirdEyeCanvas.getContext('2d');
 const entityGeneCtx = entityGeneCanvas.getContext('2d');
 
 const speedSlider = document.querySelector('#speedSlider');
+const playRadio  = document.querySelector('#play');
+const pauseRadio  = document.querySelector('#pause');
 
 const fpsInstant = document.querySelector('#fpsInstant');
 const fpsAvg     = document.querySelector('#fpsAvg');
@@ -30,10 +32,10 @@ var graveyard = []
 var count     = 30;//75;
 var inspectedCow = null;
 var statMap  = new Map();
-var terrainWidth = 400;//800;
-var terrainHeight = 200;//400;
-var terrainX = 400;
-var terrainY = 600;
+var terrainWidth = 1000;//800;  //these are causing no affect
+var terrainHeight = 400;//400;
+var terrainX = 100;
+var terrainY = 100;
 var polyType = 6;
 var tileArea = 720*8//720*(1);
 //ad hoc test shows that fps is more adversely affected by rendering tiles not cows..
@@ -45,6 +47,15 @@ let simId = null;
 let renderTimeMapList = [];
 let updateTimeMapList = [];
 let tilesRedraw = true;
+let paused = false;
+
+const baseTick = 50;
+let tick = baseTick;  //calculating based on starting tick
+const tickMax = 200;
+const tickMin = 1;
+speedSlider.max = tickMax;
+speedSlider.min = tickMin;
+speedSlider.value = tick;
 
 
 const maxFillRecursion = 75;
@@ -63,7 +74,6 @@ const maxFillRecursion = 75;
 let img = document.getElementById("cowsprites");
 
 //const tick = 3000;     //simulation time step in ms
-let tick = 10;
 
 //Map of Canvases used
 let cans = [   { name: 'map'   , can : mapCanvas          , con: leftPane },
@@ -74,13 +84,27 @@ let cans = [   { name: 'map'   , can : mapCanvas          , con: leftPane },
 
 //set up logic for slider input
 
-/*
 speedSlider.oninput = function() {
   //console.log(speedSlider.value);
   tick = speedSlider.value;
   console.log(tick);
 }
-*/
+
+playRadio.oninput = function() {
+  console.log("play hit");
+  paused = play.value != "play";
+  console.log(paused);
+}
+
+pauseRadio.oninput = function() {
+  console.log("pause hit");
+  paused = pause.value == "pause";
+  console.log(paused);
+}
+
+
+//set up logic for play pause radio inputs
+
 
 /* Resize each canvas to adhere to the Aspect Ratio */
 let adjustGraphics = function() {
@@ -124,10 +148,22 @@ let adjustGraphics = function() {
 
   //construct the simulation
   //adjust terrain values before build
-  terrainWidth = mapCanvas.width*(18/20);
-  terrainHeight = mapCanvas.height*(18/20);
-  terrainX = terrainWidth/20;
-  terrainY = terrainHeight/20;
+  if ( terrainWidth > mapCanvas.width ) {
+    terrainWidth = mapCanvas.width*(18/20);
+    console.warn("terrain width exceeded logical width adjusted");
+  }
+  if ( terrainHeight > mapCanvas.height ) {
+    terrainHeight = mapCanvas.height*(18/20);
+    console.warn("terrain height exceeded logical height adjusted");
+  }
+  if (terrainX > mapCanvas.width ) {
+    terrainX = terrainWidth/18;
+    console.warn("terrain x exceeded logical width adjusted");
+  }
+  if ( terrainY > mapCanvas.height ) {
+    terrainY = terrainHeight/18;
+    console.warn("terrain y exceeded logical height adjusted");
+  }
 
   buildTileMap();
   applyTerrain();
@@ -318,7 +354,7 @@ class Grass {
     this.hydration      =  hd;
     this.comfort        =  com;
     this.kind = "grass";
-    this.color = grain[Math.ceil( (this.harvestLevel / this.harvestMax)*grain.length )];
+    this.color = grain[Math.ceil( (this.harvestLevel / this.harvestMax)*(grain.length-1))];
   }
 
   update() {
@@ -329,7 +365,7 @@ class Grass {
     if (this.harvestLevel > this.harvestMax) {
       this.harvestLevel = this.harvestMax;
     }
-    this.color = grain[Math.ceil( (this.harvestLevel / this.harvestMax)*grain.length )];
+    this.color = grain[Math.floor( (this.harvestLevel / this.harvestMax)*(grain.length-1) )];
   }
 }
 
@@ -530,7 +566,6 @@ class cow {
       } else if ( this.facing == "south") {
         sy = sprHeight * 0;
       } else {
-        console.log(" I am facing " + this.facing);
         sy = sprHeight * 1;
         scaleX = -1;
         //adjust dx for flipped scale
@@ -902,7 +937,7 @@ class cow {
         //state housekeeping
         this.state = "rest";
         this.stateTicks = 0;
-        this.stateCap = 80;
+        this.stateCap = 100;
         //anim housekeeping
         this.animCap = 2;
         this.animSpeed = 1;
@@ -914,7 +949,16 @@ class cow {
         //state housekeeping
         this.state = "move";
         this.stateTicks = 0;
-        this.stateCap = 10;
+        //how long it takes to traverse is affected by agility
+        //introduced graphical inconsistency where when cow is in transit
+        //another cow can appear to go into it's spot even though that cow is
+        //has left it but it slow ( Maybe introduce hex pockets for placing cows
+        //in the same region.
+        //In addition to that, cows that take many ticks for one move appear
+        //to run at the same speed (animation) and there should be a mechanism
+        //to throttle the rate at which animation occurs
+        let agilityModifier = Math.ceil((1-this.agility)*5);
+        this.stateCap = 10*agilityModifier;
         //anim housekeeping
         this.animCap = 4;
         this.animSpeed = 1;
@@ -988,7 +1032,7 @@ class cow {
     let hungerSeverity = 5 - Math.floor( (this.hunger / this.hungerCap)*10);
     //every 10 percentage energy loss below 5, results in n times more energy depleted.
     if ( hungerSeverity > 0) {
-      this.energy -= hungerSeverity;
+      this.energy -= .2*hungerSeverity;
     }
 
     //////////////////////
@@ -1228,7 +1272,7 @@ function buildTileMap() {
   //Place the first tile at the center of the terrain dimension
   let cp = new point(terrainX + terrainWidth/2,terrainY + terrainHeight/2);
   //720 x 2  //Math.PI/2
-  let tt = new Tile(cp,polyType,tileArea,Math.PI/2,null);
+  let tt = new Tile(cp,polyType,tileArea,0,null);
   //tt.type = new Grass(.2,30,.02,100,.3,.5);
 
   //fill out boundary with tiles
@@ -1256,12 +1300,12 @@ function buildTileMap() {
 
 function applyTerrain() {
 
-
+    // apply grass tiles
     tileMap.forEach( t => {
       let tv = .2; //traversability
-      let hl = Math.random()*30; //harvest level
-      let hr = (Math.random()*4)*(.01); //harvest rate
       let hm = 100; //max harvest
+      let hl = Math.random()*hm/2; //harvest level
+      let hr = (Math.random()*4)*(.01); //harvest rate
       let hd = .2; //hydration
       let com = .4; //comfort
       t.type = new Grass(tv,hl,hr,hm,hd,com);
@@ -1272,9 +1316,9 @@ function applyTerrain() {
     tileMap.forEach( t => {
       if (Math.random() < wrate) {
         let tv = Math.random()*(.6) + .2; //traversability water can be .2 to .8
-        let hl = Math.random()*30; //harvest level
-        let hr = (Math.random()*4)*(.01); //harvest rate
         let hm = 100; //max harvest
+        let hl = Math.random()*hm; //harvest level
+        let hr = (Math.random()*4)*(.01); //harvest rate
         let hd = 1; //hydration
         let com = 0; //comfort
         t.type = new Water(tv,hl,hr,hm,hd,com);
@@ -1284,7 +1328,7 @@ function applyTerrain() {
     let rrate = .4;
     tileMap.forEach( t => {
       if (Math.random() < rrate) {
-        let tv = Math.random()*.3 + .2
+        let tv = Math.random()*.5 + .2
         let hl = 0; //harvest level
         let hr = 0; //harvest rate
         let hm = 0; //max harvest
@@ -1342,7 +1386,7 @@ function tilesUpdate() {
 // Update Cows     (Logical)  //
 ////////////////////////////////
 function cowsUpdate() {
-    console.warn("---------Cows update--- " + tickCounter + " -----");
+    //console.warn("---------Cows update--- " + tickCounter + " -----");
     cows.forEach( c => {
       c.update();
     });
@@ -1366,7 +1410,7 @@ function cowsUpdate() {
 /////////////////////////////
 function runStat() {
 
-  clearInterval(id);
+  clearInterval(simId);
   console.log(graveyard);
   //run stats on graveyard
   graveyard.forEach( c => {
@@ -1432,31 +1476,36 @@ function inspectedStatUpdate() {
 function inspectedGeneUpdate() {
 
     let geneMap = inspectedCow.genes;
-    // gene display will occupy same width as the bird's eye view
-    let barGapRatio = .4;   //ratio of space between bars and the space the bars occupy in x
-    let barW = entityGeneCanvas.width * (1-barGapRatio) / geneMap.size;
-    let barH = entityGeneCanvas.height * (3/4);
-
 
     let index = 0;
-    let colors = ['Aqua','Aquamarine','BlueViolet','Brown','Charteuse','Chocolate','Blue',
+    let colors = ['Aqua','Aquamarine','BlueViolet','Brown','yellow','Chocolate','Blue',
                   'Crimson','Cyan','DarkOrange','DeepPink','DarkRed','Gold'];
 
-    //clear
     entityGeneCtx.clearRect(0,0,entityGeneCanvas.width,entityGeneCanvas.height);
+
+    //side ways bars
+    let barGapRatio = .4;   //ratio of space between bars and the space the bars occupy in x
+    let barW = entityGeneCanvas.width * .65;
+    let barH = entityGeneCanvas.height * (1-barGapRatio) / geneMap.size;
+    let barXOffset = entityGeneCanvas.width * .35;
 
     geneMap.forEach((value,key) => {
       entityGeneCtx.save();
       entityGeneCtx.fillStyle = colors[index];
       entityGeneCtx.lineWidth = 1;
-      entityGeneCtx.fillRect(   (((barGapRatio*barW) + barW) * index) + barW*2,
-                                entityGeneCanvas.height,barW,-barH*value);
 
-      entityGeneCtx.strokeRect( (((barGapRatio*barW) + barW) * index) + barW*2,
-                                entityGeneCanvas.height,barW,-barH);
+      entityGeneCtx.fillRect(barXOffset,(((barGapRatio*barH) + barH) * index) + barH*2,
+                             barW*value,barH);
+
+      entityGeneCtx.strokeRect(barXOffset,(((barGapRatio*barH) + barH) * index) + barH*2,
+                             barW,barH);
+      //stroke text for now, should have html elements in future for faster rendering 
+      entityGeneCtx.font = "16px Verdana";
+      entityGeneCtx.fillText(key,0,(((barGapRatio*barH) + barH) * (index+.5)) + barH*2);
       entityGeneCtx.restore();
       index++;
     });
+
 }
 
 
@@ -1528,7 +1577,20 @@ function tileDraw() {
 ///////////////////////////////
 
 
-function updateCall() {
+function updateCall(localTick) {
+  //check to see if tick has been adjusted by the slider, if so clear this interval
+  //and call setInterval again with the new tick rate
+  if (tick != localTick) {
+    console.warn("tick rate has changed, cancelling interval");
+    clearInterval(simId);
+    console.warn("setting new interval with tick : " , tick);
+    simId = setInterval(updateCall,tick,tick);
+  }
+
+  if(paused) {
+    return;
+  }
+
   if ( tickCounter > maxUpdates )  {
     clearInterval(simId);
 
@@ -1637,7 +1699,7 @@ function updateCall() {
     let cowF  = performance.now();
     tilesUpdate();
     let finish = performance.now();
-    console.log("Update Call took : ", finish - start);
+    //console.log("Update Call took : ", finish - start);
     tickCounter++;
 
     let updateTimeMap = {
@@ -1657,7 +1719,7 @@ function updateCall() {
     let avgFps = frameCounter * (1 / (tick/1000));
     fpsAvg.textContent = avgFps.toFixed(2);
     frameCounter = 0;
-    console.log("frames last update : ", frameCounter );
+    //console.log("frames last update : ", frameCounter );
 
 
   }
@@ -1739,7 +1801,7 @@ function start() {
   });
 
   //Simulation Logic Loop
-  simId = setInterval(updateCall,tick);
+  simId = setInterval(updateCall,tick,tick);
   //Simulation Animation Loop
   //let startTime = performance.now()
   window.requestAnimationFrame(drawAll,performance.now());

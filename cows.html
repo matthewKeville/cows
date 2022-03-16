@@ -54,8 +54,10 @@
         <span> Play / Pause </span>
         <input type="radio" id="play" name="playPause" value="play" checked>
         <input type="radio" id="pause" name="playPause" value="pause">
+
         <span> Simulation Speed </span> 
-        <input type="range" min="50" max="1000" value="50" id="speedSlider">
+        <!-- Default is 50ms , allows for 50x speed, and 1/4 speed -->
+        <input type="range" min="1" max="200" value="50" id="speedSlider">
       </div>
 
     </div>

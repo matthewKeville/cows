@@ -28,3 +28,7 @@ x is the true coordinate of the entire html document ...
    , splitting the tick time over the target refresh rate : tick / 60 
    and waiting until time passes each time phase
    tick / 60 , 2*tick / 60 , 3*tick /60 ... tick
+
+Canvas Optimization
+https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Optimizing_canvas
+

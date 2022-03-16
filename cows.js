@@ -39,7 +39,7 @@ var tileArea = 720*8//720*(1);
 //ad hoc test shows that fps is more adversely affected by rendering tiles not cows..
 var frameCounter = 0;
 
-const maxUpdates = 100;//10100;
+const maxUpdates = 10000;//10100;
 let tickCounter = 0;
 let simId = null;
 let renderTimeMapList = [];
@@ -569,10 +569,30 @@ class cow {
       stateText = "sLuuuuRp";
     }
 
+    //add color to the sprite
+    let buffer = document.createElement('canvas');
+    buffer.width  = sprWidth;
+    buffer.height = sprHeight;
+    let buffCtx = buffer.getContext('2d');
+
+    //fill buffer with tint color
+    buffCtx.fillStyle = this.color;
+    buffCtx.fillRect(0,0,buffer.width,buffer.height);
+
+    //destination atop makes result with an alpha channel identical 
+    //to fg with all pixels retaining original color
+    buffCtx.globalCompositeOperation = "destination-atop";
+    buffCtx.drawImage(cowsprites,sx,sy,sprWidth,sprHeight,0,0,sprWidth,sprHeight);
+
+
     //draw sprites with calculated indices
     this.ctx.save();
     this.ctx.scale(scaleX,scaleY);
     this.ctx.drawImage(cowsprites,sx,sy,sprWidth,sprHeight,dx,dy,sprWidth,sprHeight);
+    //apply the tint from buffCtx
+    this.ctx.globalAlpha = .4;
+    this.ctx.drawImage(buffer,dx,dy,sprWidth,sprHeight);
+
     this.ctx.restore();
     //change dx to normal scale
     //only needed it to be flipped for rendering on negative x scale for westward movement.
@@ -583,16 +603,21 @@ class cow {
     this.boundingPath = new Path2D();
     this.boundingPath.arc(dx+sprWidth/2,dy+sprHeight/2,this.size,0,2*Math.PI); 
 
-    /*
+
     //apply a hue of this cow's color to the drawn image
     //works but also hues the white pixels which we want to ignore
     //can i only apply hue to pixels with non-zero alpha value?
-    this.ctx.globalCompositeOperation = "hue";
+    //this.ctx.globalCompositeOperation = "hue";
+    /*
+    this.ctx.globalCompositionOperation = "destination-atop";
     this.ctx.fillStyle = this.color;
     this.ctx.fillRect(dx,dy,sprWidth,sprHeight);
-    this.ctx.globalCompositionOperation = "source-over";
     this.ctx.restore();
     */
+
+
+
+
 
     
 
@@ -1285,14 +1310,7 @@ function buildCows(count) {
   graveyard = [];
 
   for ( let i = 0; i < count; i++ ) {
-    //todo apply a hue over the sprite so cows can have unique colors
-    /*
-    let r = Math.random()*100 + 155;
-    let g = Math.random()*100 + 155;
-    let b = Math.random()*100 + 155;
-    let color = "rgb(" + r + "," + g + "," + b +")";
     let name = names[Math.floor(Math.random()*names.length)];
-    */
     let startFound = false;
     while (!startFound) {
       let tileIndex = Math.floor(Math.random()*tileMap.length);

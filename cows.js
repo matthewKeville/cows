@@ -21,56 +21,46 @@ const playRadio  = document.querySelector('#play');
 const pauseRadio  = document.querySelector('#pause');
 
 const sliderElements = document.querySelectorAll('.speed');
-console.log(sliderElements);
-sliderElements.forEach( se => {
-  se.oninput = function() {
-    if (se.checked) {
-      scale = se.value;
-      console.log("se val : " , se.value);
-      tick = baseTick*scale;
-    }
-  }
-});
 
 const fpsInstant = document.querySelector('#fpsInstant');
 const fpsAvg     = document.querySelector('#fpsAvg');
 const populationDisplay = document.querySelector('#population');
-var tileMap =   [];
-var cows =      [];
-var graveyard = []
-var count     = 300;//75;
 
-let populationCounter = count;
-var inspectedCow = null;
-var statMap  = new Map();
-var terrainWidth = 1000;//800;  //these are causing no affect
+var count     = 100;
+var terrainWidth =  1000;//800;  //these are causing no affect
 var terrainHeight = 800;//400;
 var terrainX = 100;
 var terrainY = 100;
 var polyType = 6;
-var tileArea = 720*.25//720*(1);
-//ad hoc test shows that fps is more adversely affected by rendering tiles not cows..
-var frameCounter = 0;
+var tileArea = 720*6//720*(1);
+
+var tileMap =   [];
+var cows =      [];
+var graveyard = [];
+let populationCounter = count;
+var inspectedCow = null;
+var statMap  = new Map();
+
 
 const maxUpdates = 10000;//10100;
 let tickCounter = 0;
 let simId = null;
 let renderTimeMapList = [];
 let updateTimeMapList = [];
+var frameCounter = 0;
+
 let tilesRedraw = true;
-let paused = false;
+let paused = false;  
+                     
+//        |-----------------------------------|
+// scale  |  8     4     2     1     .5   .25 |
+//        |-----|-----|-----|-----|-----|-----|
+// tick   | 2.5    5     10    20     40   80 |
+//        |-----------------------------------|
+
+const baseTick = 40;
 let tickScaler = 1;
-const baseTick = 40; //2.5 (8x) 5 (4x) 10 (2x) 20 (1x) 40 (.1/2 x) 80 (1/4 x)
 let tick = baseTick*tickScaler;  //calculating based on starting tick
-const tickMax = 200;
-const tickMin = 1;
-
-
-/*
-speedSlider.max = tickMax;
-speedSlider.min = tickMin;
-speedSlider.value = tick;
-*/
 
 
 const maxFillRecursion = 75;
@@ -87,8 +77,107 @@ const maxFillRecursion = 75;
  */
 
 let img = document.getElementById("cowsprites");
+const cowSpriteSheetWidth  = 128;
+const cowSpriteSheetHeight = 160;
 
-//const tick = 3000;     //simulation time step in ms
+//Sprite sheet is a [ 4 x 5 ] array of sprites
+const cowBaseWidth = cowSpriteSheetWidth/4;
+const cowBaseHeight = cowSpriteSheetHeight/5
+let   cowBaseScale = 1;
+let diverseColors = false;  //when more color diversity is present 
+                            //signifcantly more memory is taken up
+                            // 16KB per image
+                            //b.o.t. calculations state that 1000 colors
+                            //would require an additional MB on the memory heap
+                            //as the list needs to be in memory all the time.
+let tintColors = [];
+if (diverseColors) {
+  tintColors = [  'Aqua','Aquamarine','BlueViolet','Brown',
+                    'yellow','Chocolate','Blue',   'Crimson',
+                    'Cyan','DarkOrange','DeepPink','DarkRed',
+                    'Gold'                                    ];
+} else {
+  tintColors = [  'Aqua','Aquamarine','BlueViolet','Brown', ];
+}
+
+/* 
+ * My original intent, was to have a process that creates js <Img> elements
+ * from exporting a transforming of a local canvas with hue with Canvas.getDataURL()
+ * However, the sprite sheet is coming from the web server and thus it is cross-origin
+ * chrome security policy restricts saving 'tainted' canvases (one transforming cross
+ * origin images) as a new image, thus I have to resort to saving a canvas for each
+ * buffer, or I can save one canvas, in which I can index each hue, I'm unsure which is
+ * more performant
+ */
+
+//Scaling needs to map sprite dimensions to integers otherwise
+//some sprite bits might get cut out
+
+//128 |--.75x--> 96  |--.5x-> 64  |--.25x-> 32
+//160 |--.75x--> 120 |--.5x-> 80  |--.25x-> 40
+let maturityScale = {
+                      baby  : .75,
+                      child :1.5,
+                      adult : 2
+                    }
+
+let spriteTints =   {
+                     baby:  {},
+                     child: {},
+                     adult: {}
+                    }
+
+let renderTints = function() {
+  //render 3 canvas for each color 
+  Object.keys(spriteTints).forEach( mat => {
+    //get the scale for this maturity group
+    let scale = maturityScale[mat];
+    tintColors.forEach ( col => {
+      //create a temporary canvas
+      let preBuffer = document.createElement('canvas');
+      preBuffer.width  = cowSpriteSheetWidth;
+      preBuffer.height = cowSpriteSheetHeight;
+      let preBuffCtx = preBuffer.getContext('2d');
+
+      //create the space for the resultant buffer
+      let postBuffer = document.createElement('canvas');
+      postBuffer.width  = cowSpriteSheetWidth;
+      postBuffer.height = cowSpriteSheetHeight;
+      let postBuffCtx = postBuffer.getContext('2d');
+
+      //fill preBuffer with tint color
+      preBuffCtx.fillStyle = col;
+      preBuffCtx.fillRect(0,0,preBuffer.width,preBuffer.height);
+
+      //destination atop makes result with an alpha channel identical 
+      //to fg with all pixels retaining original color
+      preBuffCtx.globalCompositeOperation = "destination-atop";
+      preBuffCtx.drawImage(cowsprites,0,0);
+
+      postBuffCtx.drawImage(cowsprites,0,0);
+      //apply the tint from preBuffer
+      postBuffCtx.globalAlpha = .4;
+      postBuffCtx.drawImage(preBuffer,0,0);
+
+      let finalBuffer = document.createElement('canvas');
+      finalBuffer.width  =  Math.floor(cowSpriteSheetWidth*scale);
+      finalBuffer.height =  Math.floor(cowSpriteSheetHeight*scale);
+        let finalCtx = finalBuffer.getContext('2d');
+      finalCtx.scale(scale,scale);
+      finalCtx.drawImage(postBuffer,0,0);
+
+      // save canvas to a map
+      spriteTints[mat][col] = finalBuffer;
+    });
+  //add original image to tintColors options
+  tintColors.original = img;
+  });
+}
+
+renderTints();
+console.log(spriteTints);
+
+
 
 //Map of Canvases used
 let cans = [   { name: 'map'   , can : mapCanvas          , con: leftPane },
@@ -96,16 +185,6 @@ let cans = [   { name: 'map'   , can : mapCanvas          , con: leftPane },
                { name: 'bird'  , can : entityBirdEyeCanvas, con: entityBirdEyePane },
                { name: 'gene'  , can : entityGeneCanvas   , con: entityGenePane }
            ]
-
-//set up logic for slider input
-/*
-speedSlider.oninput = function() {
-  console.log("ssval "  ,speedSlider.value);
-  tickScaler = Math.pow(2,speedSlider.value);
-  tick  = baseTick * tickScaler;
-  console.log(tick);
-}
-*/
 
 
 playRadio.oninput = function() {
@@ -119,6 +198,16 @@ pauseRadio.oninput = function() {
   paused = pause.value == "pause";
   console.log(paused);
 }
+
+sliderElements.forEach( se => {
+  se.oninput = function() {
+    if (se.checked) {
+      scale = se.value;
+      console.log("se val : " , se.value);
+      tick = baseTick*scale;
+    }
+  }
+});
 
 
 //set up logic for play pause radio inputs
@@ -442,9 +531,8 @@ const emotionBase = 1000;
 const hydrationBase = 1000;
 //Cows are doubly referenced between cow and tile
 class cow {
-  constructor(tile,env,size,color,name,genes) {
+  constructor(tile,env,color,name,genes,maturity) {
     // 1. size should be reworked/ repurposed
-    // 2. color currently has no affect
 
     //graphics context
     this.ctx = cowCtx;
@@ -454,6 +542,7 @@ class cow {
     ////////////////////////
     //
     this.genes = genes;
+    this.maturity = maturity;  //what phase of growth I am in
 
     this.absorption      = this.genes.get('absorption');    //impact hydration cap
     this.agility         = this.genes.get('agility');    //ease of traversal
@@ -474,8 +563,9 @@ class cow {
     this.alive = true;
     this.tile = tile; //tile im located at all
     this.env  = env;  //list of all tiles in the universe
-    this.size = size;
+    //this.size = size;
     this.color = color;
+    this.spriteSrc = spriteTints[this.color];
     this.name = name;
 
 
@@ -527,15 +617,9 @@ class cow {
 
   //and draw to the canvas
   draw() {
-    /*
-    console.log("drawing cow");
-    console.log("state tick : " , this.stateTicks); 
-    console.log("state cap  : " , this.stateCap);
-    console.log("% transition : " , this.stateTicks /this.stateCap);
-    */
 
-    let sprWidth  = 128/4;
-    let sprHeight = 160/5;
+    let sprWidth  = cowBaseWidth*maturityScale[this.maturity];
+    let sprHeight = cowBaseHeight*maturityScale[this.maturity];
 
     //where to place sprites so they are centered at
     //our tiles ? (position)  center point
@@ -622,32 +706,13 @@ class cow {
       stateText = "sLuuuuRp";
     }
    
-    //add color to the sprite
-    /*
-    let buffer = document.createElement('canvas');
-    buffer.width  = sprWidth;
-    buffer.height = sprHeight;
-    let buffCtx = buffer.getContext('2d');
-
-    //fill buffer with tint color
-    buffCtx.fillStyle = this.color;
-    buffCtx.fillRect(0,0,buffer.width,buffer.height);
-
-    //destination atop makes result with an alpha channel identical 
-    //to fg with all pixels retaining original color
-    buffCtx.globalCompositeOperation = "destination-atop";
-    buffCtx.drawImage(cowsprites,sx,sy,sprWidth,sprHeight,0,0,sprWidth,sprHeight);
-    */
 
     //draw sprites with calculated indices
     this.ctx.save();
     this.ctx.scale(scaleX,scaleY);
-    this.ctx.drawImage(cowsprites,sx,sy,sprWidth,sprHeight,dx,dy,sprWidth,sprHeight);
-    //apply the tint from buffCtx
-    /*
-    this.ctx.globalAlpha = .4;
-    this.ctx.drawImage(buffer,dx,dy,sprWidth,sprHeight);
-    */
+    //this.ctx.drawImage(cowsprites,sx,sy,sprWidth,sprHeight,dx,dy,sprWidth,sprHeight);
+    //console.log(spriteTints[this.maturity][this.color]);
+    this.ctx.drawImage(spriteTints[this.maturity][this.color],sx,sy,sprWidth,sprHeight,dx,dy,sprWidth,sprHeight);
     this.ctx.restore();
     //change dx to normal scale
     //only needed it to be flipped for rendering on negative x scale for westward movement.
@@ -655,8 +720,13 @@ class cow {
 
     //I may be able to translate the path instead of recalculating like this
     //update the bounding path of the cow
+    //
+    //TODO : bounding path is rectangle of sprite ...
+    //       removing size attribute of cow
+    /*
     this.boundingPath = new Path2D();
     this.boundingPath.arc(dx+sprWidth/2,dy+sprHeight/2,this.size,0,2*Math.PI); 
+    */
 
 
     //apply a hue of this cow's color to the drawn image
@@ -675,7 +745,7 @@ class cow {
 
 
     
-
+    //TODO : removing size attribute of cow
     //info bars
     /*
     this.ctx.fillStyle = "green";
@@ -1258,10 +1328,7 @@ const names = [ "spark" , "cherry" , "plop", "ting" , "rocky", "spuck",
 
 function makeCow(tile,env) {
 
-    let r = Math.random()*100 + 155;
-    let g = Math.random()*100 + 155;
-    let b = Math.random()*100 + 155;
-    let color = "rgb(" + r + "," + g + "," + b +")";
+    let color = tintColors[Math.floor(Math.random()*tintColors.length)];
     let name = names[Math.floor(Math.random()*names.length)];
 
     let genes = new Map();
@@ -1276,7 +1343,12 @@ function makeCow(tile,env) {
     genes.set( 'nomadicity'      , Math.random()  );    //desire to migrate
     genes.set( 'satiation'       , Math.random()  );    //impact hunger cap
     genes.set( 'urgency'         , Math.random()  );    //desire to mate
-    return new cow(tile,env,20,color,name,genes);
+
+    
+    let maturity = Math.random() > .66 ? "baby":
+                  (Math.random() > .5  ? "child" : "adult");
+
+    return new cow(tile,env,color,name,genes,maturity);
 }
 
 
@@ -1293,9 +1365,7 @@ function buildTileMap() {
   //Construct a world boundary and fill it with tiles.
   //Place the first tile at the center of the terrain dimension
   let cp = new point(terrainX + terrainWidth/2,terrainY + terrainHeight/2);
-  //720 x 2  //Math.PI/2
   let tt = new Tile(cp,polyType,tileArea,0,null);
-  //tt.type = new Grass(.2,30,.02,100,.3,.5);
 
   //fill out boundary with tiles
   let frontier = [];
@@ -1304,13 +1374,10 @@ function buildTileMap() {
   //seed frontier
   frontier.push(tt);
   //fill out the tileMap
-  //Log time elapsed
-  //console.time('FillingMap');
   let st = performance.now();
   [frontier,tileMap] = fill(frontier,tileMap,terrainWidth,terrainHeight,terrainX,terrainY);
   let fn = performance.now();
   console.log("Filling time in Seconds" , (fn-st)/100000);
-  //console.timeEnd('FillingMap');
   console.log(tileMap);
 
 }
@@ -1478,6 +1545,7 @@ function inspectedStatUpdate() {
     }
 
     addStat("Name : " + ins.name);
+    addStat("Maturity : " + ins.maturity);
     addStat("Energy : " + dp(ins.energy));
     addStat("Hunger : " + dp(ins.hunger));
     addStat("Emotion : " + dp(ins.emotion));

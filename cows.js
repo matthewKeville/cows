@@ -26,9 +26,11 @@ const fpsInstant = document.querySelector('#fpsInstant');
 const fpsAvg     = document.querySelector('#fpsAvg');
 const populationDisplay = document.querySelector('#population');
 
+//
+
 var count     = 100;
-var terrainWidth =  1000;//800;  //these are causing no affect
-var terrainHeight = 800;//400;
+var terrainWidth =  1000;
+var terrainHeight = 800;
 var terrainX = 100;
 var terrainY = 100;
 var polyType = 6;
@@ -42,12 +44,12 @@ var inspectedCow = null;
 var statMap  = new Map();
 
 
-const maxUpdates = 10000;//10100;
+const maxUpdates = 10000;
 let tickCounter = 0;
-let simId = null;
-let renderTimeMapList = [];
-let updateTimeMapList = [];
-var frameCounter = 0;
+let simId = null;     //id of update Interval
+let renderTimeMapList = [];  //render time deltas
+let updateTimeMapList = [];  //update time deltas
+var frameCounter = 0;        //intra update frame counter
 
 let tilesRedraw = true;
 let paused = false;  
@@ -58,39 +60,26 @@ let paused = false;
 // tick   | 2.5    5     10    20     40   80 |
 //        |-----------------------------------|
 
-const baseTick = 40;
+const baseTick = 40; //tick interval for 1x speed
 let tickScaler = 1;
-let tick = baseTick*tickScaler;  //calculating based on starting tick
+let tick = baseTick*tickScaler;
 
 
-const maxFillRecursion = 75;
 // Recurison of 88 , yielded 14255 tiles , and took about 20 seconds to calculate
-/*  with terrainDim = (800,800)
- *  with terrainOr  = (200,200)
- *  with polyType   = 6
- *  with tileArea = 720*(1/16)
- *  88 fill recursion reached
- *  52000, i.e. 52 seconds of map filling
- *
- *  with same but 720*(1/8)
- *  62 recursion , and 13 seconds
- */
+const maxFillRecursion = 75;  // recursive limit for filling algo
 
+//load in sprite sheet
 let img = document.getElementById("cowsprites");
-const cowSpriteSheetWidth  = 128;
-const cowSpriteSheetHeight = 160;
+const cowSpriteSheetWidth  = 128; 
+const cowSpriteSheetHeight = 160; 
 
 //Sprite sheet is a [ 4 x 5 ] array of sprites
 const cowBaseWidth = cowSpriteSheetWidth/4;
 const cowBaseHeight = cowSpriteSheetHeight/5
-let   cowBaseScale = 1;
-let diverseColors = false;  //when more color diversity is present 
-                            //signifcantly more memory is taken up
-                            // 16KB per image
-                            //b.o.t. calculations state that 1000 colors
-                            //would require an additional MB on the memory heap
-                            //as the list needs to be in memory all the time.
-let tintColors = [];
+
+let cowBaseScale = 1;  //unused , planned for zoom in/zoom out scaling
+let diverseColors = false;  //for systems with limited memory , increases performance
+let tintColors = [];  //tints available for sprites
 if (diverseColors) {
   tintColors = [  'Aqua','Aquamarine','BlueViolet','Brown',
                     'yellow','Chocolate','Blue',   'Crimson',
@@ -102,8 +91,8 @@ if (diverseColors) {
 
 /* 
  * My original intent, was to have a process that creates js <Img> elements
- * from exporting a transforming of a local canvas with hue with Canvas.getDataURL()
- * However, the sprite sheet is coming from the web server and thus it is cross-origin
+ * from exporting a transformation of a local canvas with hue with Canvas.getDataURL()
+ * However, the sprite sheet is coming from the web server and thus it is cross-origin,
  * chrome security policy restricts saving 'tainted' canvases (one transforming cross
  * origin images) as a new image, thus I have to resort to saving a canvas for each
  * buffer, or I can save one canvas, in which I can index each hue, I'm unsure which is
@@ -111,16 +100,19 @@ if (diverseColors) {
  */
 
 //Scaling needs to map sprite dimensions to integers otherwise
-//some sprite bits might get cut out
+//some sprite bits might get cut out, below is a map of 
+//supported fractional scaling
 
 //128 |--.75x--> 96  |--.5x-> 64  |--.25x-> 32
 //160 |--.75x--> 120 |--.5x-> 80  |--.25x-> 40
+
+//map maturity stages to scales of base sprite dimensions
 let maturityScale = {
                       baby  : .75,
                       child :1.5,
                       adult : 2
                     }
-
+//for each color and each maturity scale render a canvas of the sprite sheet
 let spriteTints =   {
                      baby:  {},
                      child: {},
@@ -128,6 +120,7 @@ let spriteTints =   {
                     }
 
 let renderTints = function() {
+  let start  = performance.now();
   //render 3 canvas for each color 
   Object.keys(spriteTints).forEach( mat => {
     //get the scale for this maturity group
@@ -172,10 +165,8 @@ let renderTints = function() {
   //add original image to tintColors options
   tintColors.original = img;
   });
+  console.log("sprite transformation rendering took " , performance.now() - start);
 }
-
-renderTints();
-console.log(spriteTints);
 
 
 
@@ -186,6 +177,8 @@ let cans = [   { name: 'map'   , can : mapCanvas          , con: leftPane },
                { name: 'gene'  , can : entityGeneCanvas   , con: entityGenePane }
            ]
 
+
+//add pause play logic to elements in the DOM
 
 playRadio.oninput = function() {
   console.log("play hit");
@@ -210,8 +203,6 @@ sliderElements.forEach( se => {
 });
 
 
-//set up logic for play pause radio inputs
-
 
 /* Resize each canvas to adhere to the Aspect Ratio */
 let adjustGraphics = function() {
@@ -223,8 +214,10 @@ let adjustGraphics = function() {
     console.log("canvas : " + c.name  + " width : "  + c.can.width + " height :" + c.can.height);
   });
 
+  // Note approach is un-optimal (although little relative efficiency is lost)
+  // This should be a straight forward function of modulus
   cans.forEach( c => {
-
+    
     let nearestRes = { x : AspectRatio.x , y : AspectRatio.y };
     let maxed = false;
     while ( nearestRes.x < c.con.offsetWidth && nearestRes.y < c.con.offsetHeight ) {
@@ -233,13 +226,11 @@ let adjustGraphics = function() {
     }
     nearestRes.x -= AspectRatio.x;
     nearestRes.y -= AspectRatio.y;
-    /*
-    console.log("nearest res");
-    console.log(nearestRes);
-    */
+
     //adjust logical canvas dimensions
     c.can.width  = nearestRes.x;
     c.can.height = nearestRes.y;
+
     //adjust canvas style to have a 1:1 mapping to client to logical representation
     c.can.style.width = nearestRes.x;
     c.can.style.height = nearestRes.y;
@@ -272,21 +263,43 @@ let adjustGraphics = function() {
     console.warn("terrain y exceeded logical height adjusted");
   }
 
+  /*
   buildTileMap();
   applyTerrain();
   buildCows(count);
   start();
+  renderTints();
+  */
 
 
 }
 
-document.addEventListener("DOMContentLoaded", adjustGraphics);
+let initialize = function() {
+  adjustGraphics();
+  buildTileMap();
+  renderTints();
+  applyTerrain();
+  buildCows(count);
+  start();
+}
+
+
+document.addEventListener("DOMContentLoaded", initialize);
 
 
 ////////////////////
 //Utility
 ///////////////////
 
+
+// While no issues are present now, this implementation is needlessly bound
+// to 2D. This should be a generalized vector math class, that supports
+// the computation of n-vectors -->
+// Considerations: 
+//  toInt (wrapper around math.floor)
+//  dotProduct
+//  crossProduct
+//  norm
 class point {
   static epsilon = .001;
   constructor(x,y) {
@@ -346,8 +359,10 @@ function r2p(p1) {
   return new point(r,t);
 }
 
-//take in two points (as vectors)
-//return angle between them
+//take in two points (as vectors)      ^
+//return angle between them           /
+//                                   / ø
+//                                   ---->
 function vecAngle(p1v,p2v) {
   let dot = (p1v.x * p2v.x) + (p1v.y * p2v.y);
   let p1n = Math.sqrt ( p1v.x * p1v.x + p1v.y * p1v.y)
@@ -401,7 +416,6 @@ class Tile {
   }
 
   renderPath() {
-
     let path = new Path2D();
     let vertices = [];
     for ( let i = 0; i < this.n; i++) {
@@ -433,7 +447,7 @@ class Tile {
 // Terrain              //
 //////////////////////////
 
-//64 phases of growth
+//64 colors for growth phase of grass tiles
  const grain = [ '#884B11' , '#854C11' , '#834E11' , '#815011' ,
                  '#7F5211' , '#7D5412' , '#7B5612' , '#785712' ,
                  '#765912' , '#745B13' , '#725D13' , '#705F13' ,
@@ -529,11 +543,10 @@ const energyBase = 1000;
 const hungerBase = 1000;
 const emotionBase = 1000;
 const hydrationBase = 1000;
+
 //Cows are doubly referenced between cow and tile
 class cow {
   constructor(tile,env,color,name,genes,maturity) {
-    // 1. size should be reworked/ repurposed
-
     //graphics context
     this.ctx = cowCtx;
 
@@ -544,17 +557,17 @@ class cow {
     this.genes = genes;
     this.maturity = maturity;  //what phase of growth I am in
 
-    this.absorption      = this.genes.get('absorption');    //impact hydration cap
-    this.agility         = this.genes.get('agility');    //ease of traversal
-    this.desiribility    = this.genes.get('desiribility');    //likelihood of mating
-    this.endurance       = this.genes.get('endurance');    //impact energy cap
-    this.hermitic        = this.genes.get('hermitic');    //desire to avoid others
-    this.hostility       = this.genes.get('hostility');    //likelihood of attacking others
-    this.metabolicEff    = this.genes.get('metabolicEff');    //easge of digestion
-    this.mindfullness    = this.genes.get('mindfullness');    //impact emotion cap
-    this.nomadicity      = this.genes.get('nomadicity');   //desire to migrate
-    this.satiation       = this.genes.get('satiation');    //impact hunger cap
-    this.urgency         = this.genes.get('urgency');    //desire to mate
+    this.absorption      = this.genes['absorption'];    //impact hydration cap
+    this.agility         = this.genes['agility'];    //ease of traversal
+    this.desiribility    = this.genes['desiribility'];    //likelihood of mating
+    this.endurance       = this.genes['endurance'];    //impact energy cap
+    this.hermitic        = this.genes['hermitic'];    //desire to avoid others
+    this.hostility       = this.genes['hostility'];    //likelihood of attacking others
+    this.metabolicEff    = this.genes['metabolicEff'];    //easge of digestion
+    this.mindfullness    = this.genes['mindfullness'];    //impact emotion cap
+    this.nomadicity      = this.genes['nomadicity'];   //desire to migrate
+    this.satiation       = this.genes['satiation'];    //impact hunger cap
+    this.urgency         = this.genes['urgency'];    //desire to mate
 
     ///////////////////////////
     //Model variables
@@ -569,10 +582,10 @@ class cow {
     this.name = name;
 
 
-    this.energyCap = energyBase * this.endurance;  
-    this.hungerCap = hungerBase * this.satiation;
-    this.emotionCap = emotionBase * this.mindfullness;
-    this.hydrationCap = hydrationBase * this.absorption;
+    this.energyCap =    energyBase    * ((2 * this.endurance)    + 1);  
+    this.hungerCap =    hungerBase    * ((2 * this.satiation)    + 1);
+    this.emotionCap =   emotionBase   * ((2 * this.mindfullness) + 1);
+    this.hydrationCap = hydrationBase * ((2 * this.absorption)   + 1);
 
     this.energy = this.energyCap; //physical health
     this.hunger = this.hungerCap; //energy in the body
@@ -1331,19 +1344,28 @@ function makeCow(tile,env) {
     let color = tintColors[Math.floor(Math.random()*tintColors.length)];
     let name = names[Math.floor(Math.random()*names.length)];
 
-    let genes = new Map();
-    genes.set( 'absorption'      , Math.random()  );    //impact hydration cap
-    genes.set( 'agility'         , Math.random()  );    //ease of traversal
-    genes.set( 'desiribility'    , Math.random()  );    //likelihood of mating
-    genes.set( 'endurance'       , Math.random()  );    //impact energy cap
-    genes.set( 'hermitic'        , Math.random()  );    //desire to avoid others
-    genes.set( 'hostility'       , Math.random()  );    //likelihood of attacking others
-    genes.set( 'metabolicEff'    , Math.random()  );    //easge of digestion
-    genes.set( 'mindfullness'    , Math.random()  );    //impact emotion cap
-    genes.set( 'nomadicity'      , Math.random()  );    //desire to migrate
-    genes.set( 'satiation'       , Math.random()  );    //impact hunger cap
-    genes.set( 'urgency'         , Math.random()  );    //desire to mate
+    let genes = {};
+    genes['absorption']      =Math.random();    //impact hydration cap
+    genes['agility']         =Math.random();     //ease of traversal
+    genes['desiribility']    =Math.random();     //likelihood of mating
+    genes['endurance']       =Math.random();     //impact energy cap
+    genes['hermitic']        =Math.random();     //desire to avoid others
+    genes['hostility']       =Math.random();     //likelihood of attacking others
+    genes['metabolicEff']    =Math.random();     //easge of digestion
+    genes['mindfullness']    =Math.random();     //impact emotion cap
+    genes['nomadicity']      =Math.random();     //desire to migrate
+    genes['satiation']       =Math.random();     //impact hunger cap
+    genes['urgency']         =Math.random();     //desire to mate
 
+    //normalize the gene map such that it is isomorphic to a unit vector in n-space
+    //where n is the number of genes that make up a cow
+    let rawGeneSum = Object.values(genes).reduce( 
+      (prev,current) => 
+        prev + current,0
+    );
+    Object.keys(genes).forEach( (key) => {
+      genes[key] /= rawGeneSum;
+    });
     
     let maturity = Math.random() > .66 ? "baby":
                   (Math.random() > .5  ? "child" : "adult");
@@ -1582,7 +1604,7 @@ function inspectedGeneUpdate() {
     let barH = entityGeneCanvas.height * (1-barGapRatio) / geneMap.size;
     let barXOffset = entityGeneCanvas.width * .35;
 
-    geneMap.forEach((value,key) => {
+    Object.entries(geneMap).forEach((value,key) => {
       entityGeneCtx.save();
       entityGeneCtx.fillStyle = colors[index];
       entityGeneCtx.lineWidth = 1;

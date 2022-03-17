@@ -34,7 +34,7 @@ var terrainHeight = 800;
 var terrainX = 100;
 var terrainY = 100;
 var polyType = 6;
-var tileArea = 720*6//720*(1);
+var tileArea = 720*2//720*6//720*(1);
 
 var tileMap =   [];
 var cows =      [];
@@ -1326,6 +1326,48 @@ function fill(frontier,closed,width,height,x,y,debug=0) {
   }
 }
 
+//to be done : exchange type with a generator function that takes
+//in starting parameters. Can be used to make layered types
+//    
+//    W
+//  W R W
+//    W
+function recurseApplyTerrain(tile,steps,tileMutator) {
+  let i = steps;
+  let infected = [];
+  let frontier = [tile];
+  while ( i > 0 ) {
+    console.log("recurseApply " ,i);
+    let current = frontier;
+    frontier = [];
+    current.forEach( t => {
+      tileMutator(i,steps,t);
+      infected.push(t);
+      t.neighbors.forEach( n => {
+        if (!infected.includes(n) && !frontier.includes(n) && !current.includes(n)) {
+          frontier.push(n);
+        }
+      });
+    });
+    i--;
+  }
+  /*
+  ignore = ignore ?? [];
+  if (steps <= 0) return;
+  if (tile.type != type) tile.type = type;
+  tile.neighbors.forEach( t => {
+    if (!ignore.includes(t)) {
+      t.type = type;
+      recurseApplyTerrain(t,steps-1,type,ignore.concat(tile.neighbors));
+    }
+  });
+  */
+}
+
+
+
+
+
 
 //////////////////////
 // Cow instanatiation
@@ -1436,6 +1478,7 @@ function applyTerrain() {
       }
     });
 
+    /*
     let rrate = .4;
     tileMap.forEach( t => {
       if (Math.random() < rrate) {
@@ -1448,10 +1491,136 @@ function applyTerrain() {
         t.type = new Rock(tv,hl,hr,hm,hd,com);
       }
     });
+    */
+
+    //tile mutators
+
+
+    let stoneWaterFold = function(k,steps,tile) {
+      if ( k % 2 == 0 ) {
+        tile.type = new Rock(.7,0,0,0,0,.2);
+      } else {
+        tile.type = new Water(1,0,0,0,1,0);
+        //Interesting thought experiment, for what value
+        // p , do we expect this process to terminate
+        // cleary if p = 100% it will never, if the process
+        // duplicates, it's likelihood of duplication increases
+        // much more becuase the number of changes of duplication 
+        // increase with every success
+        /*
+        if (Math.random() < .05) {
+          recurseApplyTerrain(tile,3,stoneWaterFold);
+        }
+        */
+      }
+    }
+
+
+    recurseApplyTerrain(tileMap[20],3,stoneWaterFold);
+
 
     console.log("tile map after mutation");
     console.log(tileMap);
 }
+
+////////////// Curve Generation //////////////////////////
+
+
+//assume that the center of these curves is the origin
+//of the cartesian plane
+// This class represents a random closed curved with a sinusuidal basis
+// The class will allow the computation of points on this curve from [0,2PI]
+// And will have methods to draw the graph
+function closedCurveFactory(minPeriod,maxPeriod,minAmplitude,maxAmplitude,scale,length,iters)
+  {
+
+  ///////////////////////////////////////////////////////////////
+  //calculate wave numbers,amplitudes,and an infinum lower bound
+  ///////////////////////////////////////////////////////////////
+
+  //f indicates the vars belonging to the generating call
+  var famps = [];
+  var fperiods = [];
+  for (let k = 0; k < length; k++) {
+    //amplitude
+    let amp = Math.random() * Math.abs(maxAmplitude - minAmplitude) + minAmplitude;
+    let period = Math.ceil(Math.random() * Math.abs(maxPeriod - minPeriod) + minPeriod);
+    famps.push(amp);
+    fperiods.push(period);
+  }
+  //////////////////////////////
+  //infinum lower bound
+  //////////////////////////////
+
+  //allows us to force this radial parameterization to be >= 0.
+  //which guarantess that this curve has no self intersections
+  var finf = 0;
+  for ( let k = 0; k < length; k++) {
+    finf += Math.abs(famps[k]);
+  }
+
+  //calculate the radial function at a given value of theta
+  //addition to computed radial generates a more circular shape
+  //multiplication strictly amplifys scale
+  //must be somewhat to integrate smoothness and scale , without
+  //overscaling the shape$a
+  //overscaling the shape
+  let radial = function(theta) {
+    //make a local copy of the values passed to the parent function
+    //to be referenced in this self contained function
+    let amps = famps;
+    let periods = fperiods;
+    let inf = finf;
+    //calculate the radial from this sinusuidal composition
+    let radial = 0;
+    for ( let k = 0; k < length; k++ ) {
+      radial += amps[k]*Math.sin(periods[k]*theta);
+    }
+    //add the lower infinum bound to this value to ensure non-self intersection
+    radial += Math.abs(inf);
+    //radial += 300; //as we add to the radial function it smooths out and becomes more circular
+    //I suppose we can compose any closed shap , such as an ellipse with the fourier series to create a a more elliptical shape
+    radial += 10;
+    radial *= scale;
+    //console.log(theta, " : " , radial);
+    return radial;
+  }
+  return radial;
+
+}
+
+function drawRadialCurve(radial,center,revs,iters,ctx) {
+  ctx.save();
+  ctx.translate(center.x,center.y);
+  ctx.beginPath();
+  let dtheta = revs * (2*Math.PI) / iters;
+    for ( var i = 0; i <= iters; i++) {
+      //current angle
+      let z = dtheta*i;
+      //current radius scaled by curve.scale
+      let r = radial(z);
+      let xy = p2r(r,z);
+      //translate to center
+      xy = xy.add(center);
+
+        //console.log(xi + " , " + yi);
+        if ( i!= 0 ) {
+          ctx.lineTo(xy.x,xy.y);
+          //if this is the first point, don't draw a line, just start the path
+        } else {
+          ctx.moveTo(xy.x,xy.y);
+        }
+      }
+    ctx.stroke();
+    ctx.closePath();
+    ctx.restore();
+}
+
+
+//function closedCurveFactory(minPeriod,maxPeriod,minAmplitude,maxAmplitude,scale,length,iters)
+//Example
+let closedCurveRadial = closedCurveFactory(2,6,-1,2,.5,10,100000);
+//drawRadialCurve(closedCurveRadial,new point(cowCanvas.width/4,cowCanvas.height/4),1,1000,cowCtx);
 
 
 function buildCows(count) {
@@ -1481,6 +1650,8 @@ function buildCows(count) {
   }
   console.log("Cows Produced");
   console.log(cows);
+  populationCounter = count;
+  populationDisplay.textContent = count;
 
 }
 

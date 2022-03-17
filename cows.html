@@ -4,6 +4,7 @@
       <ul id="fpsList" class="fps">
         <li class="fps"> FPS <span class="fps" id="fpsInstant">30</span> </li>
         <li class="fps"> AVG <span class="fps" id="fpsAvg"    >30</span> </li>
+        <li class="fps"> Pop <span class="fps" id="population">1</span>  </li>
       </ul>
       <canvas id="mapCanvas">
       </canvas>
@@ -56,8 +57,18 @@
         <input type="radio" id="pause" name="playPause" value="pause">
 
         <span> Simulation Speed </span> 
-        <!-- Default is 50ms , allows for 50x speed, and 1/4 speed -->
-        <input type="range" min="1" max="200" value="50" id="speedSlider">
+        <label>[1/4] <input type="radio" name="speed" class="speed" value="4"      ></label>
+        <label>[1/2] <input type="radio" name="speed" class="speed" value="2"       ></label>
+        <label>[ 1 ] <input type="radio" name="speed" class="speed" value="1" checked></label>
+        <label>[ 2 ] <input type="radio" name="speed" class="speed" value=".5"        ></label>
+        <label>[ 4 ] <input type="radio" name="speed" class="speed" value=".25"        ></label>
+        <label>[ 8 ] <input type="radio" name="speed" class="speed" value=".125"        ></label>
+
+        <!-- Default is 50ms , allows for 8x speed, and 1/4 speed -->
+        <!-- tick rate is scaled by 2^(value) --> 
+        <!--
+        <input type="range" min="0" max="2" value="0" id="speedSlider" step="1">
+        -->
       </div>
 
     </div>

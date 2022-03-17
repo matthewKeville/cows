@@ -17,27 +17,38 @@ const cowCtx = cowCanvas.getContext('2d');
 const mapCtx = mapCanvas.getContext('2d'); 
 const entityBirdEyeCtx = entityBirdEyeCanvas.getContext('2d');
 const entityGeneCtx = entityGeneCanvas.getContext('2d');
-
-const speedSlider = document.querySelector('#speedSlider');
 const playRadio  = document.querySelector('#play');
 const pauseRadio  = document.querySelector('#pause');
 
+const sliderElements = document.querySelectorAll('.speed');
+console.log(sliderElements);
+sliderElements.forEach( se => {
+  se.oninput = function() {
+    if (se.checked) {
+      scale = se.value;
+      console.log("se val : " , se.value);
+      tick = baseTick*scale;
+    }
+  }
+});
+
 const fpsInstant = document.querySelector('#fpsInstant');
 const fpsAvg     = document.querySelector('#fpsAvg');
-
-
+const populationDisplay = document.querySelector('#population');
 var tileMap =   [];
 var cows =      [];
 var graveyard = []
-var count     = 30;//75;
+var count     = 300;//75;
+
+let populationCounter = count;
 var inspectedCow = null;
 var statMap  = new Map();
 var terrainWidth = 1000;//800;  //these are causing no affect
-var terrainHeight = 400;//400;
+var terrainHeight = 800;//400;
 var terrainX = 100;
 var terrainY = 100;
 var polyType = 6;
-var tileArea = 720*8//720*(1);
+var tileArea = 720*.25//720*(1);
 //ad hoc test shows that fps is more adversely affected by rendering tiles not cows..
 var frameCounter = 0;
 
@@ -48,14 +59,18 @@ let renderTimeMapList = [];
 let updateTimeMapList = [];
 let tilesRedraw = true;
 let paused = false;
-
-const baseTick = 50;
-let tick = baseTick;  //calculating based on starting tick
+let tickScaler = 1;
+const baseTick = 40; //2.5 (8x) 5 (4x) 10 (2x) 20 (1x) 40 (.1/2 x) 80 (1/4 x)
+let tick = baseTick*tickScaler;  //calculating based on starting tick
 const tickMax = 200;
 const tickMin = 1;
+
+
+/*
 speedSlider.max = tickMax;
 speedSlider.min = tickMin;
 speedSlider.value = tick;
+*/
 
 
 const maxFillRecursion = 75;
@@ -83,12 +98,15 @@ let cans = [   { name: 'map'   , can : mapCanvas          , con: leftPane },
            ]
 
 //set up logic for slider input
-
+/*
 speedSlider.oninput = function() {
-  //console.log(speedSlider.value);
-  tick = speedSlider.value;
+  console.log("ssval "  ,speedSlider.value);
+  tickScaler = Math.pow(2,speedSlider.value);
+  tick  = baseTick * tickScaler;
   console.log(tick);
 }
+*/
+
 
 playRadio.oninput = function() {
   console.log("play hit");
@@ -603,8 +621,9 @@ class cow {
       this.ctx.font = '12px monospace';
       stateText = "sLuuuuRp";
     }
-
+   
     //add color to the sprite
+    /*
     let buffer = document.createElement('canvas');
     buffer.width  = sprWidth;
     buffer.height = sprHeight;
@@ -618,16 +637,17 @@ class cow {
     //to fg with all pixels retaining original color
     buffCtx.globalCompositeOperation = "destination-atop";
     buffCtx.drawImage(cowsprites,sx,sy,sprWidth,sprHeight,0,0,sprWidth,sprHeight);
-
+    */
 
     //draw sprites with calculated indices
     this.ctx.save();
     this.ctx.scale(scaleX,scaleY);
     this.ctx.drawImage(cowsprites,sx,sy,sprWidth,sprHeight,dx,dy,sprWidth,sprHeight);
     //apply the tint from buffCtx
+    /*
     this.ctx.globalAlpha = .4;
     this.ctx.drawImage(buffer,dx,dy,sprWidth,sprHeight);
-
+    */
     this.ctx.restore();
     //change dx to normal scale
     //only needed it to be flipped for rendering on negative x scale for westward movement.
@@ -657,6 +677,7 @@ class cow {
     
 
     //info bars
+    /*
     this.ctx.fillStyle = "green";
     this.ctx.fillRect(dx,dy,(this.energy/this.energyCap)*this.size*2,5);
     this.ctx.strokeRect(dx,dy,this.size*2,5);
@@ -682,6 +703,7 @@ class cow {
     this.ctx.fillStyle = "red";
     this.ctx.font = '12px monospace';
     this.ctx.fillText(stateText,dx,dy - this.size);
+    */
 
   }
 
@@ -957,7 +979,7 @@ class cow {
         //In addition to that, cows that take many ticks for one move appear
         //to run at the same speed (animation) and there should be a mechanism
         //to throttle the rate at which animation occurs
-        let agilityModifier = Math.ceil((1-this.agility)*5);
+        let agilityModifier = Math.ceil((1-this.agility)*3);
         this.stateCap = 10*agilityModifier;
         //anim housekeeping
         this.animCap = 4;
@@ -1347,6 +1369,7 @@ function buildCows(count) {
   if ( count > tileMap.length ) {
     console.warn("Requested More Cows Than Tiles, Truncating Count to fit");
     count = tileMap.length;
+    populationCounter = count;
   }
 
   //reset cows and graveyard
@@ -1396,6 +1419,8 @@ function cowsUpdate() {
       if (!cows[i].alive) {
         dead.push(i);
         graveyard.push(cows[i]);
+        populationCounter--;
+        populationDisplay.textContent = populationCounter;
       }
     }
     let removed = 0;

@@ -28,13 +28,13 @@ const populationDisplay = document.querySelector('#population');
 
 //
 
-var count     = 100;
+var count     = 300;
 var terrainWidth =  1000;
 var terrainHeight = 800;
 var terrainX = 100;
-var terrainY = 100;
+var terrainY = 0;
 var polyType = 6;
-var tileArea = 720*2//720*6//720*(1);
+var tileArea = 720//720*6//720*(1);
 
 var tileMap =   [];
 var cows =      [];
@@ -108,9 +108,9 @@ if (diverseColors) {
 
 //map maturity stages to scales of base sprite dimensions
 let maturityScale = {
-                      baby  : .75,
-                      child :1.5,
-                      adult : 2
+                      baby  : .5,
+                      child :.75,
+                      adult :1
                     }
 //for each color and each maturity scale render a canvas of the sprite sheet
 let spriteTints =   {
@@ -131,12 +131,14 @@ let renderTints = function() {
       preBuffer.width  = cowSpriteSheetWidth;
       preBuffer.height = cowSpriteSheetHeight;
       let preBuffCtx = preBuffer.getContext('2d');
+      preBuffCtx.imageSmoothingQuality = 'high';
 
       //create the space for the resultant buffer
       let postBuffer = document.createElement('canvas');
       postBuffer.width  = cowSpriteSheetWidth;
       postBuffer.height = cowSpriteSheetHeight;
       let postBuffCtx = postBuffer.getContext('2d');
+      postBuffCtx.imageSmoothingQuality = 'high';
 
       //fill preBuffer with tint color
       preBuffCtx.fillStyle = col;
@@ -157,6 +159,7 @@ let renderTints = function() {
       finalBuffer.height =  Math.floor(cowSpriteSheetHeight*scale);
         let finalCtx = finalBuffer.getContext('2d');
       finalCtx.scale(scale,scale);
+      finalCtx.imageSmoothingQuality = 'high';
       finalCtx.drawImage(postBuffer,0,0);
 
       // save canvas to a map
@@ -605,6 +608,7 @@ class cow {
     this.hydrationRestored = 0;
     this.tilesTraveled = 0;
     this.ticks = 0;
+    this.fitness = 0;
     this.causeOfDeath = null;
 
     this.previousTile = null;  //what tile the cow is heading to
@@ -636,8 +640,9 @@ class cow {
 
     //where to place sprites so they are centered at
     //our tiles ? (position)  center point
-    let centeredx = this.pos.x - sprWidth/2;
-    let centeredy = this.pos.y - sprHeight/2;
+    //Warning I'm not sure what this is trying to calculate,
+    let centeredx = this.pos.x - (sprWidth)/2;
+    let centeredy = this.pos.y - (sprHeight)/2;
     
     //source origin
     //frame position in sprite sheet, derived from 
@@ -725,37 +730,28 @@ class cow {
     this.ctx.scale(scaleX,scaleY);
     //this.ctx.drawImage(cowsprites,sx,sy,sprWidth,sprHeight,dx,dy,sprWidth,sprHeight);
     //console.log(spriteTints[this.maturity][this.color]);
+   
+    
+    //experimental directional sprites unsure of performance impact
+    //very confusing due to flipping already in place and up and down sprite already existing
+    //I think the goal is to achieve some sort of directional indication for diagnol movement
+    /*
+    let f = this.facing;
+    let ang = f == "north" ? 0 : f == "south" ? Math.PI : f == "east" ? Math.PI/2 : -Math.PI/2;
+    this.ctx.translate(this.pos.x,this.pos.y);
+    //this.ctx.translate(centeredx,centeredy);
+    //this.ctx.fillRect(centeredx,centeredy,5,5);
+    //this.ctx.fillStyle = "green";
+    //this.ctx.fillRect(this.pos.x,this.pos.y,20,20);
+    this.ctx.rotate(ang);
+    //this.ctx.translate(-centeredx,-centeredy);
+    this.ctx.translate(-this.pos.x,-this.pos.y);
+    */
     this.ctx.drawImage(spriteTints[this.maturity][this.color],sx,sy,sprWidth,sprHeight,dx,dy,sprWidth,sprHeight);
     this.ctx.restore();
     //change dx to normal scale
     //only needed it to be flipped for rendering on negative x scale for westward movement.
     dx = centeredx;
-
-    //I may be able to translate the path instead of recalculating like this
-    //update the bounding path of the cow
-    //
-    //TODO : bounding path is rectangle of sprite ...
-    //       removing size attribute of cow
-    /*
-    this.boundingPath = new Path2D();
-    this.boundingPath.arc(dx+sprWidth/2,dy+sprHeight/2,this.size,0,2*Math.PI); 
-    */
-
-
-    //apply a hue of this cow's color to the drawn image
-    //works but also hues the white pixels which we want to ignore
-    //can i only apply hue to pixels with non-zero alpha value?
-    //this.ctx.globalCompositeOperation = "hue";
-    /*
-    this.ctx.globalCompositionOperation = "destination-atop";
-    this.ctx.fillStyle = this.color;
-    this.ctx.fillRect(dx,dy,sprWidth,sprHeight);
-    this.ctx.restore();
-    */
-
-
-
-
 
     
     //TODO : removing size attribute of cow
@@ -907,6 +903,9 @@ class cow {
 
   //precondition moves are available
   move() {
+
+
+
       let moves = []
       this.tile.neighbors.forEach( n => {
         if ( n.occupant == null ) {
@@ -923,12 +922,57 @@ class cow {
       //remind myself where I am
       this.tile = moves[dir];
 
+      //let tile now I'm here
+      this.tile.occupant = this;
+
+
+      //state housekeeping
+      this.state = "move";
+      this.stateTicks = 0;
+      //how long it takes to traverse is affected by agility
+      //introduced graphical inconsistency where when cow is in transit
+      //another cow can appear to go into it's spot even though that cow is
+      //has left it but it slow ( Maybe introduce hex pockets for placing cows
+      //in the same region.
+      //In addition to that, cows that take many ticks for one move appear
+      //to run at the same speed (animation) and there should be a mechanism
+      //to throttle the rate at which animation occurs
+      let agilityModifier = Math.ceil(  (1-this.agility)*3  ) * ((this.tile.type.traversability+1)**2);
+      console.log("agile " , agilityModifier);
+
       //10 would be max travel cost 
       //and is discounted by traversability and cows endurance
       //cap endurant discount at .05, means that .95 -> 1 has no difference ...
+      //this.energy -= this.tile.type.traversability*10*( Math.max((1-this.agility),.05) );
       this.energy -= this.tile.type.traversability*10*( Math.max((1-this.agility),.05) );
-      //let tile now I'm here
-      this.tile.occupant = this;
+
+      this.stateCap = 10*Math.floor(agilityModifier);
+
+      //anim housekeeping
+      this.animCap = 4;
+      this.animSpeed = 1;
+
+
+      //determine orientation
+
+      //calculate the cardinal direction i am facing
+      let dirVec = new point(this.tile.cp.x - this.previousTile.cp.x ,this.tile.cp.y - this.previousTile.cp.y)
+      let facing = null;
+    
+      let angleDirs = [];
+      angleDirs.push({ dir: "north" , dist : vecAngle(dirVec,new point(0,-1)) } ); //north
+      angleDirs.push({ dir: "east" , dist : vecAngle(dirVec,new point(1,0)) } ); //east
+      angleDirs.push({ dir: "south" , dist : vecAngle(dirVec,new point(0,1)) } ); //south
+      angleDirs.push({ dir: "west" , dist : vecAngle(dirVec,new point(-1,0)) } ); //west
+
+      let closest = 0;
+      for ( let i = 0; i < angleDirs.length; i++ ) {
+        if (angleDirs[i].dist < angleDirs[closest].dist) {
+          closest = i;
+        }
+      }
+      this.facing = angleDirs[closest].dir;
+
 
       //update audit
       this.tilesTraveled++;
@@ -938,6 +982,15 @@ class cow {
 
   rest() {
     if (this.energy < this.energyCap) {
+
+      //state housekeeping
+      this.state = "rest";
+      this.stateTicks = 0;
+      this.stateCap = 100;
+      //anim housekeeping
+      this.animCap = 2;
+      this.animSpeed = 1;
+
       //10 is base
       let energyBack = 10 * (this.tile.type.comfort);
       if (this.energyCap < this.energy + energyBack) {
@@ -953,6 +1006,14 @@ class cow {
 
   consume() {
     if ( this.tile.type.harvestLevel != 0) {
+
+      //state housekeeping
+      this.state = "eat";
+      this.stateTicks = 0;
+      this.stateCap = 40;
+      //anim housekeeping
+      this.animCap = 2;
+
       //Defecit
       let meal = 15;
       if ( meal > this.tile.type.harvestLevel ) {
@@ -973,11 +1034,28 @@ class cow {
   }
 
   idle() {
+    //state housekeeping
+    this.state = "idle";
+    this.stateTicks = 0;
+    this.stateCap = 20;
+    //anim housekeeping
+    this.animCap = 2;
+    this.animSpeed = 1;
   }
 
 
   drink() {
     if ( this.tile.type.hydration != 0) {
+
+      //state housekeeping
+      this.state = "drink";
+      this.stateTicks = 0;
+      this.stateCap = 20;
+      //anim housekeeping
+      this.animCap = 2;
+      this.animSpeed = 1;
+
+
       let sipBase = 8;
       let sip = sipBase * this.tile.type.hydration;
       if (this.hydration + sip > this.hydrationCap ) {
@@ -991,6 +1069,10 @@ class cow {
 
 
   update() {
+    //update fitness
+    this.fitness = this.energyRestored + this.hungerRestored +
+                  this.hydrationRestored + this.tilesTraveled +
+                  this.ticks;
 
     if (!this.alive) {
       return
@@ -1028,63 +1110,16 @@ class cow {
         this.consume();  
         this.actionLog.push("eat");
 
-        //state housekeeping
-        this.state = "eat";
-        this.stateTicks = 0;
-        this.stateCap = 40;
-        //anim housekeeping
-        this.animCap = 2;
 
       } else if ( action == "rest" ) {
         this.rest();
         this.actionLog.push("rest");
 
-        //state housekeeping
-        this.state = "rest";
-        this.stateTicks = 0;
-        this.stateCap = 100;
-        //anim housekeeping
-        this.animCap = 2;
-        this.animSpeed = 1;
 
       } else if ( action == "move" ) {
         this.move();
         this.actionLog.push("move");
 
-        //state housekeeping
-        this.state = "move";
-        this.stateTicks = 0;
-        //how long it takes to traverse is affected by agility
-        //introduced graphical inconsistency where when cow is in transit
-        //another cow can appear to go into it's spot even though that cow is
-        //has left it but it slow ( Maybe introduce hex pockets for placing cows
-        //in the same region.
-        //In addition to that, cows that take many ticks for one move appear
-        //to run at the same speed (animation) and there should be a mechanism
-        //to throttle the rate at which animation occurs
-        let agilityModifier = Math.ceil((1-this.agility)*3);
-        this.stateCap = 10*agilityModifier;
-        //anim housekeeping
-        this.animCap = 4;
-        this.animSpeed = 1;
-
-        //calculate the cardinal direction i am facing
-        let dirVec = new point(this.tile.cp.x - this.previousTile.cp.x ,this.tile.cp.y - this.previousTile.cp.y)
-        let facing = null;
-      
-        let angleDirs = [];
-        angleDirs.push({ dir: "north" , dist : vecAngle(dirVec,new point(0,-1)) } ); //north
-        angleDirs.push({ dir: "east" , dist : vecAngle(dirVec,new point(1,0)) } ); //east
-        angleDirs.push({ dir: "south" , dist : vecAngle(dirVec,new point(0,1)) } ); //south
-        angleDirs.push({ dir: "west" , dist : vecAngle(dirVec,new point(-1,0)) } ); //west
-
-        let closest = 0;
-        for ( let i = 0; i < angleDirs.length; i++ ) {
-          if (angleDirs[i].dist < angleDirs[closest].dist) {
-            closest = i;
-          }
-        }
-        this.facing = angleDirs[closest].dir;
 
 
 
@@ -1092,25 +1127,11 @@ class cow {
         this.drink();
         this.actionLog.push("drink");
 
-        //state housekeeping
-        this.state = "drink";
-        this.stateTicks = 0;
-        this.stateCap = 20;
-        //anim housekeeping
-        this.animCap = 2;
-        this.animSpeed = 1;
 
       } else if ( action == "idle") {
         this.idle();
         this.actionLog.push("idle");
 
-        //state housekeeping
-        this.state = "idle";
-        this.stateTicks = 0;
-        this.stateCap = 20;
-        //anim housekeeping
-        this.animCap = 2;
-        this.animSpeed = 1;
 
 
       }
@@ -1326,12 +1347,150 @@ function fill(frontier,closed,width,height,x,y,debug=0) {
   }
 }
 
+
+////////////// Curve Generation //////////////////////////
+
+
+//assume that the center of these curves is the origin
+//of the cartesian plane
+// This class represents a random closed curved with a sinusuidal basis
+// The class will allow the computation of points on this curve from [0,2PI]
+// And will have methods to draw the graph
+function closedCurveFactory(minPeriod,maxPeriod,minAmplitude,maxAmplitude,scale,length,iters)
+  {
+
+  ///////////////////////////////////////////////////////////////
+  //calculate wave numbers,amplitudes,and an infinum lower bound
+  ///////////////////////////////////////////////////////////////
+
+  //f indicates the vars belonging to the generating call
+  var famps = [];
+  var fperiods = [];
+  for (let k = 0; k < length; k++) {
+    //amplitude
+    let amp = Math.random() * Math.abs(maxAmplitude - minAmplitude) + minAmplitude;
+    let period = Math.ceil(Math.random() * Math.abs(maxPeriod - minPeriod) + minPeriod);
+    famps.push(amp);
+    fperiods.push(period);
+  }
+  //////////////////////////////
+  //infinum lower bound
+  //////////////////////////////
+
+  //allows us to force this radial parameterization to be >= 0.
+  //which guarantess that this curve has no self intersections
+  var finf = 0;
+  for ( let k = 0; k < length; k++) {
+    finf += Math.abs(famps[k]);
+  }
+
+  //calculate the radial function at a given value of theta
+  //addition to computed radial generates a more circular shape
+  //multiplication strictly amplifys scale
+  //must be somewhat to integrate smoothness and scale , without
+  //overscaling the shape$a
+  //overscaling the shape
+  let radial = function(theta) {
+    //make a local copy of the values passed to the parent function
+    //to be referenced in this self contained function
+    let amps = famps;
+    let periods = fperiods;
+    let inf = finf;
+    //calculate the radial from this sinusuidal composition
+    let radial = 0;
+    for ( let k = 0; k < length; k++ ) {
+      radial += amps[k]*Math.sin(periods[k]*theta);
+    }
+    //add the lower infinum bound to this value to ensure non-self intersection
+    radial += Math.abs(inf);
+    //radial += 300; //as we add to the radial function it smooths out and becomes more circular
+    //I suppose we can compose any closed shap , such as an ellipse with the fourier series to create a a more elliptical shape
+    radial += 10;
+    radial *= scale;
+    //console.log(theta, " : " , radial);
+    return radial;
+  }
+  return radial;
+
+}
+
+//Draw a radial curve given by the radial function, centered
+//(point) center . Curve resolution is defined by iters
+function drawRadialCurve(radial,center,revs,iters,ctx) {
+  ctx.save();
+  ctx.beginPath();
+  let dtheta = revs * (2*Math.PI) / iters;
+    for ( var i = 0; i <= iters; i++) {
+      //current angle
+      let z = dtheta*i;
+      //current radius scaled by curve.scale
+      let r = radial(z);
+      let xy = p2r(r,z);
+      //translate to center
+      xy = xy.add(center);
+        if ( i!= 0 ) {
+          ctx.lineTo(xy.x,xy.y);
+          //if this is the first point, don't draw a line, just start the path
+        } else {
+          ctx.moveTo(xy.x,xy.y);
+        }
+      }
+    ctx.stroke();
+    ctx.closePath();
+    ctx.restore();
+}
+
+
+
+//given a radial function and a scaling rule
+//transform the terrain enclosed by the radial function within
+//the environment, and apply the tile mutator to each one
+// tileMutator(baseTile , tile );
+function radialRegionApplyTerrain(tile,env,radial,tileMutator) {
+  //Get an enclosed rectangle of the radial function
+  //find max value of radial
+  let max = 0;
+  let prec = 1000;
+  for ( let i = 0; i < prec; i++) {
+    let ri = radial(2*Math.PI*i/1000);
+    max = Math.max(max,ri);
+  }
+  //construct a bounding square from this max radial with a center at tile.cp
+  //if center is tile.cp => (x,y) then rectangle start (top left) is (x-max,y-max);
+
+  //Now we can collect all tiles that atleast fit into this rectangle, to avoid a recursive fill
+  let potential = env.filter( t => {
+    let tx = t.cp.x
+    let ty = t.cp.y
+    return ( tx > (tile.cp.x - max) &&
+             tx < (tile.cp.x + max) &&
+             ty > (tile.cp.y - max) &&
+             ty < (tile.cp.y + max) );
+  });
+  
+  let actual = potential.filter( t => {
+    //we need to homogenize the coordinates
+    let ht = t.cp.sub(tile.cp);
+    let pp = r2p(ht); //convert to polar point (r,t)
+    let txr = pp.x
+    let txt = pp.y //extract  values
+    return txr < radial(txt);
+  });
+
+  actual.forEach( t => {
+    tileMutator(tile,t);
+  })
+  //return affected tiles
+  return actual;
+
+
+}
+
+
+
 //to be done : exchange type with a generator function that takes
 //in starting parameters. Can be used to make layered types
-//    
-//    W
-//  W R W
-//    W
+//tileMutator( iteration step , total steps , the tile to be mutated )
 function recurseApplyTerrain(tile,steps,tileMutator) {
   let i = steps;
   let infected = [];
@@ -1453,7 +1612,11 @@ function buildTileMap() {
 
 function applyTerrain() {
 
-    // apply grass tiles
+  let mode = "islands"
+
+  if (mode == "random" ) {
+
+    //Apply grass tiles 
     tileMap.forEach( t => {
       let tv = .2; //traversability
       let hm = 100; //max harvest
@@ -1478,7 +1641,7 @@ function applyTerrain() {
       }
     });
 
-    /*
+    //Apply rocks
     let rrate = .4;
     tileMap.forEach( t => {
       if (Math.random() < rrate) {
@@ -1491,11 +1654,12 @@ function applyTerrain() {
         t.type = new Rock(tv,hl,hr,hm,hd,com);
       }
     });
-    */
 
-    //tile mutators
+  } else if (mode == "debug" ) {
 
 
+    //tile mutators (recurse apply)
+    /*
     let stoneWaterFold = function(k,steps,tile) {
       if ( k % 2 == 0 ) {
         tile.type = new Rock(.7,0,0,0,0,.2);
@@ -1507,120 +1671,102 @@ function applyTerrain() {
         // duplicates, it's likelihood of duplication increases
         // much more becuase the number of changes of duplication 
         // increase with every success
-        /*
-        if (Math.random() < .05) {
-          recurseApplyTerrain(tile,3,stoneWaterFold);
-        }
-        */
+        //
+        //if (Math.random() < .05) {
+         // recurseApplyTerrain(tile,3,stoneWaterFold);
+        //}
       }
     }
+   */
+   //recurseApplyTerrain(tileMap[20],3,stoneWaterFold);
+    //
+   } else if (mode == "islands") {
 
 
-    recurseApplyTerrain(tileMap[20],3,stoneWaterFold);
 
+     //grass island mutator
+     let grassIsland = function(baseTile,tile) {
+        //constructor(t=5,hl=15,hr=.1,hm=100,hd = 1, com = 1) {
+      let tv = .2; //traversability
+      let hm = 100; //max harvest
+      let hl = Math.random()*hm/2; //harvest level
+      let hr = (Math.random()*4)*(.01); //harvest rate
+      let hd = .2; //hydration
+      let com = .4; //comfort
+      tile.type = new Grass(tv,hl,hr,hm,hd,com);
+     }
+
+
+     //grass island mutator with random rocks
+     let grassIslandRandomRocks = function(baseTile,tile) {
+        //constructor(t=5,hl=15,hr=.1,hm=100,hd = 1, com = 1) {
+      if ( Math.random() > .2 ) {
+        let tv = .15; //traversability
+        let hm = 100; //max harvest
+        let hl = Math.random()*hm/2; //harvest level
+        let hr = (Math.random()*4)*(.01); //harvest rate
+        let hd = .2; //hydration
+        let com = .4; //comfort
+        tile.type = new Grass(tv,hl,hr,hm,hd,com);
+      } else {
+        let tv = Math.random()*.3 + .1
+        let hl = 0; //harvest level
+        let hr = 0; //harvest rate
+        let hm = 0; //max harvest
+        let hd = 0; //hydration
+        let com = .8; //comfort
+        tile.type = new Rock(tv,hl,hr,hm,hd,com);
+      }
+     }
+
+
+     // Islands setups
+    let islands = function(count) {
+
+
+      //function closedCurveFactory(minPeriod,maxPeriod,minAmplitude,maxAmplitude,scale,length,iters)
+      let closedCurveRadial = closedCurveFactory(2,6,-1,2,10,15,100);
+
+      //pick count number of random tiles
+      let bts = [];
+      while ( bts.length < count ) {
+        let tile = tileMap[Math.floor(Math.random()*tileMap.length)];
+        if (!bts.includes(tile)) {
+          bts.push(tile);
+        }
+      }
+    
+      let transformed = [];
+      //radialRegionApply grass island mutators
+      //function radialRegionApplyTerrain(tile,env,radial,tileMutator) {
+      bts.forEach( bt  => {
+        let closedCurveRadial = closedCurveFactory(2,6,-1,2,8,15,100);
+        let changed = radialRegionApplyTerrain(bt,tileMap,closedCurveRadial,grassIslandRandomRocks);
+        transformed = transformed.concat(changed);
+      });
+
+      //console.log("transformed " , transformed);
+
+      //for all tiles not transformed convert them to water
+      let untouched = tileMap.filter ( t => {
+        return !transformed.includes(t);
+      });
+
+      untouched.forEach( t => {
+        //constructor(t,hl,hr,hm,hd,com = 1) {
+        let tv = Math.random()*.3 + .7;
+        t.type = new Water(tv,0,0,0,1,0);
+      });
+    }
+
+    //islands mutation
+    islands(3);
+  }
 
     console.log("tile map after mutation");
     console.log(tileMap);
 }
 
-////////////// Curve Generation //////////////////////////
-
-
-//assume that the center of these curves is the origin
-//of the cartesian plane
-// This class represents a random closed curved with a sinusuidal basis
-// The class will allow the computation of points on this curve from [0,2PI]
-// And will have methods to draw the graph
-function closedCurveFactory(minPeriod,maxPeriod,minAmplitude,maxAmplitude,scale,length,iters)
-  {
-
-  ///////////////////////////////////////////////////////////////
-  //calculate wave numbers,amplitudes,and an infinum lower bound
-  ///////////////////////////////////////////////////////////////
-
-  //f indicates the vars belonging to the generating call
-  var famps = [];
-  var fperiods = [];
-  for (let k = 0; k < length; k++) {
-    //amplitude
-    let amp = Math.random() * Math.abs(maxAmplitude - minAmplitude) + minAmplitude;
-    let period = Math.ceil(Math.random() * Math.abs(maxPeriod - minPeriod) + minPeriod);
-    famps.push(amp);
-    fperiods.push(period);
-  }
-  //////////////////////////////
-  //infinum lower bound
-  //////////////////////////////
-
-  //allows us to force this radial parameterization to be >= 0.
-  //which guarantess that this curve has no self intersections
-  var finf = 0;
-  for ( let k = 0; k < length; k++) {
-    finf += Math.abs(famps[k]);
-  }
-
-  //calculate the radial function at a given value of theta
-  //addition to computed radial generates a more circular shape
-  //multiplication strictly amplifys scale
-  //must be somewhat to integrate smoothness and scale , without
-  //overscaling the shape$a
-  //overscaling the shape
-  let radial = function(theta) {
-    //make a local copy of the values passed to the parent function
-    //to be referenced in this self contained function
-    let amps = famps;
-    let periods = fperiods;
-    let inf = finf;
-    //calculate the radial from this sinusuidal composition
-    let radial = 0;
-    for ( let k = 0; k < length; k++ ) {
-      radial += amps[k]*Math.sin(periods[k]*theta);
-    }
-    //add the lower infinum bound to this value to ensure non-self intersection
-    radial += Math.abs(inf);
-    //radial += 300; //as we add to the radial function it smooths out and becomes more circular
-    //I suppose we can compose any closed shap , such as an ellipse with the fourier series to create a a more elliptical shape
-    radial += 10;
-    radial *= scale;
-    //console.log(theta, " : " , radial);
-    return radial;
-  }
-  return radial;
-
-}
-
-function drawRadialCurve(radial,center,revs,iters,ctx) {
-  ctx.save();
-  ctx.translate(center.x,center.y);
-  ctx.beginPath();
-  let dtheta = revs * (2*Math.PI) / iters;
-    for ( var i = 0; i <= iters; i++) {
-      //current angle
-      let z = dtheta*i;
-      //current radius scaled by curve.scale
-      let r = radial(z);
-      let xy = p2r(r,z);
-      //translate to center
-      xy = xy.add(center);
-
-        //console.log(xi + " , " + yi);
-        if ( i!= 0 ) {
-          ctx.lineTo(xy.x,xy.y);
-          //if this is the first point, don't draw a line, just start the path
-        } else {
-          ctx.moveTo(xy.x,xy.y);
-        }
-      }
-    ctx.stroke();
-    ctx.closePath();
-    ctx.restore();
-}
-
-
-//function closedCurveFactory(minPeriod,maxPeriod,minAmplitude,maxAmplitude,scale,length,iters)
-//Example
-let closedCurveRadial = closedCurveFactory(2,6,-1,2,.5,10,100000);
-//drawRadialCurve(closedCurveRadial,new point(cowCanvas.width/4,cowCanvas.height/4),1,1000,cowCtx);
 
 
 function buildCows(count) {
@@ -1746,6 +1892,7 @@ function inspectedStatUpdate() {
     addStat("--------------");
     addStat("State : " + ins.state);
     addStat("Ticks : " + ins.ticks);
+    addStat("Fitness : " + ins.fitness);
     //change the stat list in the dom
 
     let index = 0;
@@ -1760,7 +1907,7 @@ function inspectedStatUpdate() {
 
 
 function inspectedGeneUpdate() {
-
+    //console.log("gene update");
     let geneMap = inspectedCow.genes;
 
     let index = 0;
@@ -1772,26 +1919,23 @@ function inspectedGeneUpdate() {
     //side ways bars
     let barGapRatio = .4;   //ratio of space between bars and the space the bars occupy in x
     let barW = entityGeneCanvas.width * .65;
-    let barH = entityGeneCanvas.height * (1-barGapRatio) / geneMap.size;
-    let barXOffset = entityGeneCanvas.width * .35;
+    let barH = entityGeneCanvas.height * (1-barGapRatio) / Object.keys(geneMap).length;
+    let barXOffset = Math.floor(entityGeneCanvas.width * .35);
 
-    Object.entries(geneMap).forEach((value,key) => {
+    Object.entries(geneMap).forEach((key,value) => {
       entityGeneCtx.save();
       entityGeneCtx.fillStyle = colors[index];
       entityGeneCtx.lineWidth = 1;
 
       entityGeneCtx.fillRect(barXOffset,(((barGapRatio*barH) + barH) * index) + barH*2,
-                             barW*value,barH);
+                             barW*key[1],barH);
 
-      entityGeneCtx.strokeRect(barXOffset,(((barGapRatio*barH) + barH) * index) + barH*2,
-                             barW,barH);
       //stroke text for now, should have html elements in future for faster rendering 
       entityGeneCtx.font = "16px Verdana";
-      entityGeneCtx.fillText(key,0,(((barGapRatio*barH) + barH) * (index+.5)) + barH*2);
+      entityGeneCtx.fillText(key[0],0,(((barGapRatio*barH) + barH) * (index+.5)) + barH*2);
       entityGeneCtx.restore();
       index++;
     });
-
 }
 
 
@@ -1799,7 +1943,11 @@ function inspectedGeneUpdate() {
 //Update Bird's Eye  //
 ///////////////////////
 
-
+//consider a pre render ( of the bird eye canvas based on map canvas )
+//If map canvas updates say at a rate 10 % of the rest of the gfx, we can get away with 
+//render an optimized bird's eye view
+//we could also pre render sprites in this way but this doubles the memory foot print of 
+//the sprite sheets
 function inspectedBirdEyeUpdate() {
   //only render if a cow is inspected
   if (inspectedCow == null) {
@@ -1811,7 +1959,7 @@ function inspectedBirdEyeUpdate() {
   //birdW and birdH should be a function of intended zoom
   //we want to confine the space in the cow and map canvas to be strictly less
   //than the space provided in the birdEye Canvas
-  let zoom = 2;
+  let zoom = 4//2;
   let birdW = entityBirdEyeCanvas.width/zoom;
   let birdH = entityBirdEyeCanvas.height/zoom;
 
@@ -2005,8 +2153,6 @@ function updateCall(localTick) {
     let avgFps = frameCounter * (1 / (tick/1000));
     fpsAvg.textContent = avgFps.toFixed(2);
     frameCounter = 0;
-    //console.log("frames last update : ", frameCounter );
-
 
   }
 
@@ -2070,6 +2216,7 @@ function start() {
   cowCanvas.addEventListener('click', function(event) {
     cowCtx.fillRect(event.offsetX,event.offsetY,10,10);
     //check where the click is
+    console.log("click"); 
     cows.forEach( cw => {
       //determine if the click is inside the path of the cows bounding curve
       //TODO
@@ -2078,11 +2225,18 @@ function start() {
 
       let clickX = event.offsetX;
       let clickY = event.offsetY;
-      if (cowCtx.isPointInPath(cw.boundingPath,clickX,clickY))
-        {
-          console.log("a cow was clicked", cw);
-          inspectedCow = cw;
-        }
+      //more optimized due to short circuiting
+      if (  
+        clickX > cw.pos.x -  (cowBaseWidth*maturityScale[cw.maturity]/2)  && 
+        clickX < cw.pos.x +  (cowBaseWidth*maturityScale[cw.maturity]/2)  && 
+        clickY > cw.pos.y -  (cowBaseHeight*maturityScale[cw.maturity]/2) && 
+        clickY < cw.pos.y +  (cowBaseHeight*maturityScale[cw.maturity]/2)  
+         ) 
+      {
+        console.log("a cow was clicked", cw);
+        inspectedCow = cw;
+      }
+
     });
   });
 

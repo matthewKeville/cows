@@ -14,7 +14,7 @@ body {
   float:left;
   /* I don't like this, but width is 69% because border pushes rigt pane
    * below instead of to the side */
-  width: 60%;
+  width: 70%;
   height:100%;
   padding: 0;
   margin: 0;
@@ -67,7 +67,7 @@ canvas {
 #rightPane {
   background-color: purple;
   float:left;
-  width: 40%;
+  width: 30%;
 }
 
 /* sub panes of rightPane */

@@ -1,34 +1,16 @@
-for event
-it's event.offsetX i.e. lowercase offset and capital dimension
+1. State transition should actualize at the method call.
+** This means that when I do move(), the stateCap should be set inside
+   move so it can vary depending on the state.
+   
+   I would like to be able to vary stateCap for move depending on genetics and environment
+   Water tiles should take more time to traverse than land
 
-there is a discrepancy between the cows underlying cp, and the visual
-location that maps to it from the onClick method
+2. When water is deep it should require more energy to idle,
+   I want to build a system where the constraints allow the cows to mimic
+   semi-realistic actions. It is unrealistic to have no motivation to leave water.
+   I can tie this in with water depth, and penalize heavily and idling.
 
-If I click the spot of the circle located in the northwest hex, the cow is
-clicked. I have fudged some data keeping and point representation. I
-will need to restructure this data and the rendering methods to avoid
-redudancy and the introduction of more error prone code. I should refactor
-all drawing operations to canned Path2D paths, and recalculate only when necessary.
-I.e. dynamic elements such as cows. Tiles will never need to have paths recalculated.
-
-event offsetX differs than x
-x is the true coordinate of the entire html document ...
-
-// Request Animation Frame //
-
-1. Capped at the refresh of the display
-2. making frames to quickly
-   all frames are rendered in about 4ms but tick 500ms
-   the way draw(dt) is written , it only gets to timesteps 
-   in the first time bucket : tick/animCap*animCycles
-
-3. I need to rethink approach to draw  or
-4. change the callback on request animationFrame to spread its frames over
-   the tick interval. Something like keeping track of time elapsed since last tick
-   , splitting the tick time over the target refresh rate : tick / 60 
-   and waiting until time passes each time phase
-   tick / 60 , 2*tick / 60 , 3*tick /60 ... tick
-
-Canvas Optimization
-https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Optimizing_canvas
+3. For the island generation mode, I need a way to make water tiles farther from land
+   deeper than those closer, I can implement I nearest algo which finds the grass tile closest
+   to the current tile.
 
